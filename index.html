@@ -5,6 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>所持キャラ名鑑</title>
     <meta name="description" content="HoYoLAB の全キャラクター画面を貼り付けて、所持キャラだけを並べて眺めるツール" />
+
+    <!-- ホーム画面から起動できるようにするための manifest。相対パスにしてあるので
+         GitHub Pages のサブディレクトリ公開でもそのまま動く。
+         Service Worker は入れていない（キャッシュが data/characters.json の更新を
+         妨げ、? のままのキャラが直らなくなるため）。 -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <meta name="theme-color" content="#f4f2ee" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1a1917" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="名鑑" />
+
     <style>
       :root {
         --bg: #f4f2ee;
