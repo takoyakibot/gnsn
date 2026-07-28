@@ -12,8 +12,12 @@ name: キャラ属性データの更新
 # 合算しても ? が残る期間が長引きにくい（月次だと 5〜6 週間になりうる）。
 # 差分がなければ PR を作らずに終わるため、空振りの回は無害。
 #
-# 注意: cron はリポジトリが 60 日無活動だと GitHub 側で自動停止される。
-# workflow_dispatch を併設してあるので、停止に気づいたら手動でも回せる。
+# cron はリポジトリが 60 日無活動（実質コミットがないこと）だと GitHub 側で
+# 自動停止される。このリポジトリでは活動の実体が「このワークフローが出した PR の
+# マージ」なので、上流の genshin-db が静かな期間はマージ対象が存在せず、活動が
+# 途切れて cron が止まり、その後 genshin-db が更新されても回らなくなる。
+# 最後のステップで毎回 enable API を叩いて先回りで防いでいる。
+# それでも止まった場合は workflow_dispatch から手動で回せる。
 
 on:
   schedule:
@@ -23,6 +27,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write # 末尾の自動停止対策で enable API を叩くために必要
 
 concurrency:
   group: update-characters-data
@@ -122,3 +127,14 @@ jobs:
               --title "キャラ属性データを再生成" \
               --body-file "$RUNNER_TEMP/pr-body.md"
           fi
+
+      # 60 日無活動による cron の自動停止を先回りで防ぐ。毎回 enable API を叩いておく。
+      # データ更新の成否とは無関係なので、ここで失敗してもジョブは落とさない。
+      - name: cron の自動停止を防ぐ
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api --method PUT --silent \
+            "repos/${{ github.repository }}/actions/workflows/update-characters-data.yml/enable"
