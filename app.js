@@ -2,8 +2,13 @@
 
 import { parse } from './parse.js';
 import { attach, buildIndex, resonance, stats, unknownNames, UNKNOWN, VARIABLE } from './roster.js';
+import { availableToday, describe, moraRows } from './materials.js';
+import { matchKey } from './names.js';
 
 const STORAGE_KEY = 'gnsn.roster.v1';
+// 編成メモ / 育成予定の選択は所持キャラとは別に保存する。ロスターを貼り直しても
+// 選択が残るようにしたいので、パース結果とは混ぜない。
+const SELECTION_KEY = 'gnsn.selection.v1';
 const ELEMENTS = ['炎', '水', '風', '雷', '草', '氷', '岩', VARIABLE, UNKNOWN];
 const WEAPONS = ['片手剣', '両手剣', '長柄武器', '弓', '法器', UNKNOWN];
 const TEAM_SIZE = 4;
@@ -42,6 +47,31 @@ const store = {
   },
 };
 
+const selectionStore = {
+  load() {
+    try {
+      const v = JSON.parse(localStorage.getItem(SELECTION_KEY) ?? 'null');
+      return Array.isArray(v) ? v.filter((n) => typeof n === 'string') : [];
+    } catch {
+      return [];
+    }
+  },
+  save(names) {
+    try {
+      localStorage.setItem(SELECTION_KEY, JSON.stringify(names));
+    } catch {
+      /* 保存できなくても表示は続ける */
+    }
+  },
+  clear() {
+    try {
+      localStorage.removeItem(SELECTION_KEY);
+    } catch {
+      /* noop */
+    }
+  },
+};
+
 const state = {
   index: new Map(),
   saved: null, // { characters, format, savedAt }
@@ -50,6 +80,11 @@ const state = {
   weapons: new Set(),
   sort: 'level',
   team: [], // 表示名の配列
+  // 素材データは初回に素材を開いたときだけ取りに行く。棚の描画には要らないので
+  // 起動時に読むと 100KB 超を無駄に運ぶことになる。
+  materials: null,
+  mora: null,
+  materialsError: null,
 };
 
 // --- 描画ヘルパ ------------------------------------------------------------
@@ -67,9 +102,14 @@ function chip(label, pressed, el) {
 }
 
 function renderFilters() {
-  const build = (host, values, selected, isElement) => {
+  // 所持キャラに 1 人もいない値はチップを出さない。元素不明が 0 人なら「?」も出ない。
+  // 判定は絞り込み前の全件に対して行う（絞り込むほどチップが消えて戻せなくなるのを防ぐ）。
+  const build = (host, values, selected, field, isElement) => {
+    const present = new Set(state.attached.map((c) => c[field]));
+    for (const v of [...selected]) if (!present.has(v)) selected.delete(v);
+
     host.replaceChildren();
-    for (const v of values) {
+    for (const v of values.filter((v) => present.has(v))) {
       const b = chip(v, selected.has(v), isElement ? v : null);
       b.addEventListener('click', () => {
         selected.has(v) ? selected.delete(v) : selected.add(v);
@@ -79,8 +119,8 @@ function renderFilters() {
       host.append(b);
     }
   };
-  build($('element-filter'), ELEMENTS, state.elements, true);
-  build($('weapon-filter'), WEAPONS, state.weapons, false);
+  build($('element-filter'), ELEMENTS, state.elements, 'element', true);
+  build($('weapon-filter'), WEAPONS, state.weapons, 'weapon', false);
 }
 
 function visible() {
@@ -133,7 +173,21 @@ function renderShelf() {
 
     card.append(name, meta, line);
     card.addEventListener('click', () => toggleTeam(c.name));
-    shelf.append(card);
+
+    // 素材は別ボタンにする。カード本体のクリックは編成の出し入れのままにしておきたい。
+    // button の入れ子は不正な HTML なので、ラッパの中で兄弟として並べる。
+    const matBtn = document.createElement('button');
+    matBtn.type = 'button';
+    matBtn.className = 'mat-btn';
+    matBtn.textContent = '素材';
+    matBtn.title = `${c.name} の突破素材・天賦素材`;
+    matBtn.setAttribute('aria-label', `${c.name} の突破素材・天賦素材`);
+    matBtn.addEventListener('click', () => openMaterials(c));
+
+    const wrap = document.createElement('div');
+    wrap.className = 'card-wrap';
+    wrap.append(card, matBtn);
+    shelf.append(wrap);
   }
 
   $('filter-count').textContent =
@@ -147,6 +201,7 @@ function toggleTeam(name) {
   if (at >= 0) state.team.splice(at, 1);
   else if (state.team.length < TEAM_SIZE) state.team.push(name);
   else return; // 4 枠が埋まっているときは何もしない
+  selectionStore.save(state.team);
   renderTeam();
   renderShelf();
 }
@@ -170,7 +225,7 @@ function renderTeam() {
       meta.textContent = `${c.element} · Lv.${c.level} · ${c.constellation}凸`;
       slot.append(name, meta);
     } else {
-      slot.textContent = 'カードを選択';
+      slot.textContent = '空き枠';
     }
     host.append(slot);
   }
@@ -182,7 +237,7 @@ function renderTeam() {
     const s = document.createElement('span');
     s.className = 'none';
     s.textContent =
-      members.length === 0 ? '棚のカードを押すと編成に入ります。' : '元素共鳴なし';
+      members.length === 0 ? '棚のカードを押すと枠に入ります。' : '元素共鳴なし';
     box.append(s);
   } else {
     box.append(document.createTextNode('元素共鳴: '));
@@ -201,6 +256,196 @@ function renderTeam() {
     n.textContent = `${variable.map((c) => c.name).join(' / ')} は元素が確定しないため共鳴判定から除外しています。`;
     box.append(n);
   }
+}
+
+// --- 素材（突破・天賦） ----------------------------------------------------
+
+async function loadMaterials() {
+  if (state.materials || state.materialsError) return;
+  try {
+    const res = await fetch('./data/materials.json');
+    if (!res.ok) throw new Error(String(res.status));
+    const data = await res.json();
+    // 照合キーで引けるようにしておく。キャラ名の揺れの扱いを棚と揃える。
+    state.mora = data.mora;
+    state.materials = new Map(
+      Object.entries(data.characters).map(([name, v]) => [matchKey(name), v]),
+    );
+  } catch {
+    state.materialsError = 'キャラ素材データ（data/materials.json）を読み込めませんでした。';
+  }
+}
+
+function materialGroup(label, items) {
+  const row = document.createElement('div');
+  row.className = 'mat-group';
+  const name = document.createElement('span');
+  name.textContent = label;
+  const list = document.createElement('div');
+  list.className = 'mat-items';
+  for (const it of items) {
+    const chip = document.createElement('span');
+    chip.className = 'mat-item';
+    const b = document.createElement('b');
+    b.textContent = it.name;
+    chip.append(b);
+    // ボス素材は素材名だけでは何を殴ればいいのか分からないので入手元を添える。
+    if (it.from) {
+      const from = document.createElement('span');
+      from.className = 'mat-from';
+      from.textContent = it.from;
+      chip.append(document.createTextNode(' '), from);
+    }
+    list.append(chip);
+  }
+  row.append(name, list);
+  return row;
+}
+
+function materialBlock(heading, group, extras = []) {
+  const frag = document.createDocumentFragment();
+  const h = document.createElement('h4');
+  h.append(document.createTextNode(heading));
+  for (const el of extras) h.append(document.createTextNode(' '), el);
+  frag.append(h);
+
+  if (group.missing) {
+    const p = document.createElement('p');
+    p.className = 'dlg-missing';
+    // 「素材が要らない」ではなく「genshin-db にデータが無い」。推測で埋めない。
+    p.textContent = 'genshin-db にデータがありません。';
+    frag.append(p);
+    return frag;
+  }
+  for (const s of group.sections) frag.append(materialGroup(s.label, s.items));
+  return frag;
+}
+
+function badge(text, isToday) {
+  const b = document.createElement('span');
+  b.className = isToday ? 'badge today' : 'badge';
+  b.textContent = text;
+  return b;
+}
+
+async function openMaterials(character) {
+  await loadMaterials();
+  const dialog = $('mat-dialog');
+
+  $('mat-title').textContent = character.name;
+  $('mat-sub').textContent =
+    `${character.element} · ${character.weapon} · ${character.rarity === null ? '★?' : `★${character.rarity}`}`;
+
+  const body = $('mat-body');
+  body.replaceChildren();
+
+  if (state.materialsError) {
+    const p = document.createElement('p');
+    p.className = 'dlg-missing';
+    p.textContent = state.materialsError;
+    body.append(p);
+    dialog.showModal();
+    return;
+  }
+
+  const entry = state.materials?.get(matchKey(character.name));
+  if (!entry) {
+    const p = document.createElement('p');
+    p.className = 'dlg-missing';
+    p.textContent = 'このキャラの素材データは収録されていません。新キャラの実装直後か、HoYoLAB 側の表記がデータと異なる場合に起きます。';
+    body.append(p);
+    dialog.showModal();
+    return;
+  }
+
+  const { ascension, talent, common } = describe(entry);
+  body.append(materialBlock('突破素材', ascension));
+
+  // 天賦本の秘境と曜日。「今日回れるか」は小さなバッジに留める（主軸にしない）。
+  const extras = [];
+  if (talent.domain) extras.push(badge(talent.domain, false));
+  if (talent.days?.length) {
+    extras.push(badge(talent.days.map((d) => d.replace('曜', '')).join('・'), false));
+    if (availableToday(talent.days, new Date())) extras.push(badge('今日', true));
+  }
+  body.append(materialBlock('天賦素材', talent, extras));
+
+  // 雑魚ドロップは突破と天賦で同じなので、まとめて一度だけ出す。
+  if (common?.length) {
+    body.append(materialBlock('共通', { missing: false, sections: [{ label: 'ドロップ元', items: common }] }));
+  }
+
+  if (talent.days?.length) {
+    const note = document.createElement('p');
+    note.className = 'dlg-note';
+    note.textContent = '秘境の曜日は端末の日付と 04:00 切り替わりで判定しています。';
+    body.append(note);
+  }
+
+  dialog.showModal();
+}
+
+// --- モラ早見表 ------------------------------------------------------------
+//
+// モラの必要額は全キャラ共通なので、キャラごとには持たせず一枚の表にしている。
+
+function moraTable(caption, rows) {
+  const frag = document.createDocumentFragment();
+  const h = document.createElement('h4');
+  h.textContent = caption;
+  frag.append(h);
+
+  const table = document.createElement('table');
+  table.className = 'mora-table';
+  const head = document.createElement('tr');
+  for (const label of ['段階', '必要', '累計']) {
+    const th = document.createElement('th');
+    th.textContent = label;
+    head.append(th);
+  }
+  table.append(head);
+
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    for (const value of [r.label, r.amount.toLocaleString('ja-JP'), r.total.toLocaleString('ja-JP')]) {
+      const td = document.createElement('td');
+      td.textContent = value;
+      tr.append(td);
+    }
+    table.append(tr);
+  }
+  frag.append(table);
+  return frag;
+}
+
+async function openMora() {
+  await loadMaterials();
+  const dialog = $('mora-dialog');
+  const body = $('mora-body');
+  body.replaceChildren();
+
+  if (state.materialsError || !state.mora) {
+    const p = document.createElement('p');
+    p.className = 'dlg-missing';
+    p.textContent = state.materialsError ?? 'モラのデータを読み込めませんでした。';
+    body.append(p);
+    dialog.showModal();
+    return;
+  }
+
+  const { ascension, talent } = moraRows(state.mora);
+  body.append(moraTable('突破', ascension));
+  body.append(moraTable('天賦（1 つあたり）', talent));
+
+  const note = document.createElement('p');
+  note.className = 'dlg-note';
+  const perTalent = talent.at(-1)?.total ?? 0;
+  note.textContent =
+    `戦闘天賦は 3 つあるので、すべて Lv.10 まで上げるなら天賦だけで ${(perTalent * 3).toLocaleString('ja-JP')} モラ。` +
+    ' 全キャラ共通の値です。';
+  body.append(note);
+
+  dialog.showModal();
 }
 
 function renderStatus() {
@@ -252,7 +497,10 @@ function renderStatus() {
 function showRoster(saved) {
   state.saved = saved;
   state.attached = attach(saved.characters, state.index);
+  // 所持キャラから消えた選択は落とす（貼り直しで手放したキャラが残らないように）
+  const before = state.team.length;
   state.team = state.team.filter((n) => state.attached.some((c) => c.name === n));
+  if (state.team.length !== before) selectionStore.save(state.team);
 
   const has = state.attached.length > 0;
   $('import-panel').hidden = has;
@@ -308,10 +556,17 @@ async function main() {
   });
   $('clear-btn').addEventListener('click', () => {
     store.clear();
+    selectionStore.clear();
     state.team = [];
     showRoster({ characters: [], format: null });
     $('input').value = '';
     showImport();
+  });
+  $('team-clear').addEventListener('click', () => {
+    state.team = [];
+    selectionStore.save(state.team);
+    renderTeam();
+    renderShelf();
   });
   $('sort').addEventListener('change', (e) => {
     state.sort = e.target.value;
@@ -323,6 +578,16 @@ async function main() {
     renderFilters();
     renderShelf();
   });
+  $('mat-close').addEventListener('click', () => $('mat-dialog').close());
+  $('mora-btn').addEventListener('click', openMora);
+  $('mora-close').addEventListener('click', () => $('mora-dialog').close());
+  $('mora-dialog').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) e.currentTarget.close();
+  });
+  // 背景クリックで閉じる（dialog 本体のクリックは中身に当たるので座標では見ない）
+  $('mat-dialog').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) e.currentTarget.close();
+  });
 
   try {
     const res = await fetch('./data/characters.json');
@@ -333,6 +598,8 @@ async function main() {
     $('import-note').textContent =
       'キャラ属性データを読み込めませんでした。元素・武器種は ? で表示されます。';
   }
+
+  state.team = selectionStore.load().slice(0, TEAM_SIZE);
 
   const saved = store.load();
   if (saved) showRoster(saved);
