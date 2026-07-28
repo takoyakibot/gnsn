@@ -1,0 +1,607 @@
+{
+ "アーロイ": {
+  "element": "氷",
+  "weapon": "弓",
+  "rarity": 5
+ },
+ "アイノ": {
+  "element": "水",
+  "weapon": "両手剣",
+  "rarity": 4
+ },
+ "アルハイゼン": {
+  "element": "草",
+  "weapon": "片手剣",
+  "rarity": 5
+ },
+ "アルベド": {
+  "element": "岩",
+  "weapon": "片手剣",
+  "rarity": 5
+ },
+ "アルレッキーノ": {
+  "element": "炎",
+  "weapon": "長柄武器",
+  "rarity": 5
+ },
+ "アンバー": {
+  "element": "炎",
+  "weapon": "弓",
+  "rarity": 4
+ },
+ "イアンサ": {
+  "element": "雷",
+  "weapon": "長柄武器",
+  "rarity": 4
+ },
+ "イネファ": {
+  "element": "雷",
+  "weapon": "長柄武器",
+  "rarity": 5
+ },
+ "イファ": {
+  "element": "風",
+  "weapon": "法器",
+  "rarity": 4
+ },
+ "イルーガ": {
+  "element": "岩",
+  "weapon": "長柄武器",
+  "rarity": 4
+ },
+ "ヴァレサ": {
+  "element": "雷",
+  "weapon": "法器",
+  "rarity": 5
+ },
+ "ウェンティ": {
+  "element": "風",
+  "weapon": "弓",
+  "rarity": 5
+ },
+ "エウルア": {
+  "element": "氷",
+  "weapon": "両手剣",
+  "rarity": 5
+ },
+ "エスコフィエ": {
+  "element": "氷",
+  "weapon": "長柄武器",
+  "rarity": 5
+ },
+ "エミリエ": {
+  "element": "草",
+  "weapon": "長柄武器",
+  "rarity": 5
+ },
+ "オロルン": {
+  "element": "雷",
+  "weapon": "弓",
+  "rarity": 4
+ },
+ "カーヴェ": {
+  "element": "草",
+  "weapon": "両手剣",
+  "rarity": 4
+ },
+ "ガイア": {
+  "element": "氷",
+  "weapon": "片手剣",
+  "rarity": 4
+ },
+ "カチーナ": {
+  "element": "岩",
+  "weapon": "長柄武器",
+  "rarity": 4
+ },
+ "キィニチ": {
+  "element": "草",
+  "weapon": "両手剣",
+  "rarity": 5
+ },
+ "キャンディス": {
+  "element": "水",
+  "weapon": "長柄武器",
+  "rarity": 4
+ },
+ "クレー": {
+  "element": "炎",
+  "weapon": "法器",
+  "rarity": 5
+ },
+ "クロリンデ": {
+  "element": "雷",
+  "weapon": "片手剣",
+  "rarity": 5
+ },
+ "コレイ": {
+  "element": "草",
+  "weapon": "弓",
+  "rarity": 4
+ },
+ "ゴロー": {
+  "element": "岩",
+  "weapon": "弓",
+  "rarity": 4
+ },
+ "コロンビーナ": {
+  "element": "水",
+  "weapon": "法器",
+  "rarity": 5
+ },
+ "サンドローネ": {
+  "element": "氷",
+  "weapon": "両手剣",
+  "rarity": 5
+ },
+ "シグウィン": {
+  "element": "水",
+  "weapon": "弓",
+  "rarity": 5
+ },
+ "シトラリ": {
+  "element": "氷",
+  "weapon": "法器",
+  "rarity": 5
+ },
+ "シャルロット": {
+  "element": "氷",
+  "weapon": "法器",
+  "rarity": 4
+ },
+ "シュヴルーズ": {
+  "element": "炎",
+  "weapon": "長柄武器",
+  "rarity": 4
+ },
+ "シロネン": {
+  "element": "岩",
+  "weapon": "片手剣",
+  "rarity": 5
+ },
+ "ジン": {
+  "element": "風",
+  "weapon": "片手剣",
+  "rarity": 5
+ },
+ "スカーク": {
+  "element": "氷",
+  "weapon": "片手剣",
+  "rarity": 5
+ },
+ "スクロース": {
+  "element": "風",
+  "weapon": "法器",
+  "rarity": 4
+ },
+ "セトス": {
+  "element": "雷",
+  "weapon": "弓",
+  "rarity": 4
+ },
+ "セノ": {
+  "element": "雷",
+  "weapon": "長柄武器",
+  "rarity": 5
+ },
+ "ダリア": {
+  "element": "水",
+  "weapon": "片手剣",
+  "rarity": 4
+ },
+ "タルタリヤ": {
+  "element": "水",
+  "weapon": "弓",
+  "rarity": 5
+ },
+ "チャスカ": {
+  "element": "風",
+  "weapon": "弓",
+  "rarity": 5
+ },
+ "ディオナ": {
+  "element": "氷",
+  "weapon": "弓",
+  "rarity": 4
+ },
+ "ディシア": {
+  "element": "炎",
+  "weapon": "両手剣",
+  "rarity": 5
+ },
+ "ティナリ": {
+  "element": "草",
+  "weapon": "弓",
+  "rarity": 5
+ },
+ "ディルック": {
+  "element": "炎",
+  "weapon": "両手剣",
+  "rarity": 5
+ },
+ "ドゥリン": {
+  "element": "炎",
+  "weapon": "片手剣",
+  "rarity": 5
+ },
+ "トーマ": {
+  "element": "炎",
+  "weapon": "長柄武器",
+  "rarity": 4
+ },
+ "ドール（女）": {
+  "element": "可変",
+  "weapon": "片手剣",
+  "rarity": 5
+ },
+ "ドール（男）": {
+  "element": "可変",
+  "weapon": "片手剣",
+  "rarity": 5
+ },
+ "ドリー": {
+  "element": "雷",
+  "weapon": "両手剣",
+  "rarity": 4
+ },
+ "ナヴィア": {
+  "element": "岩",
+  "weapon": "両手剣",
+  "rarity": 5
+ },
+ "ナヒーダ": {
+  "element": "草",
+  "weapon": "法器",
+  "rarity": 5
+ },
+ "ニィロウ": {
+  "element": "水",
+  "weapon": "片手剣",
+  "rarity": 5
+ },
+ "ニコ": {
+  "element": "炎",
+  "weapon": "法器",
+  "rarity": 5
+ },
+ "ヌヴィレット": {
+  "element": "水",
+  "weapon": "法器",
+  "rarity": 5
+ },
+ "ネフェル": {
+  "element": "草",
+  "weapon": "法器",
+  "rarity": 5
+ },
+ "ノエル": {
+  "element": "岩",
+  "weapon": "両手剣",
+  "rarity": 4
+ },
+ "バーバラ": {
+  "element": "水",
+  "weapon": "法器",
+  "rarity": 4
+ },
+ "ファルカ": {
+  "element": "風",
+  "weapon": "両手剣",
+  "rarity": 5
+ },
+ "ファルザン": {
+  "element": "風",
+  "weapon": "弓",
+  "rarity": 4
+ },
+ "フィッシュル": {
+  "element": "雷",
+  "weapon": "弓",
+  "rarity": 4
+ },
+ "フリーナ": {
+  "element": "水",
+  "weapon": "片手剣",
+  "rarity": 5
+ },
+ "フリンズ": {
+  "element": "雷",
+  "weapon": "長柄武器",
+  "rarity": 5
+ },
+ "プルーネ": {
+  "element": "風",
+  "weapon": "法器",
+  "rarity": 4
+ },
+ "フレミネ": {
+  "element": "氷",
+  "weapon": "両手剣",
+  "rarity": 4
+ },
+ "ベネット": {
+  "element": "炎",
+  "weapon": "片手剣",
+  "rarity": 4
+ },
+ "マーヴィカ": {
+  "element": "炎",
+  "weapon": "両手剣",
+  "rarity": 5
+ },
+ "ミカ": {
+  "element": "氷",
+  "weapon": "長柄武器",
+  "rarity": 4
+ },
+ "ムアラニ": {
+  "element": "水",
+  "weapon": "法器",
+  "rarity": 5
+ },
+ "モナ": {
+  "element": "水",
+  "weapon": "法器",
+  "rarity": 5
+ },
+ "ヤフォダ": {
+  "element": "風",
+  "weapon": "弓",
+  "rarity": 4
+ },
+ "ヨォーヨ": {
+  "element": "草",
+  "weapon": "長柄武器",
+  "rarity": 4
+ },
+ "ラウマ": {
+  "element": "草",
+  "weapon": "法器",
+  "rarity": 5
+ },
+ "リオセスリ": {
+  "element": "氷",
+  "weapon": "法器",
+  "rarity": 5
+ },
+ "リサ": {
+  "element": "雷",
+  "weapon": "法器",
+  "rarity": 4
+ },
+ "リネ": {
+  "element": "炎",
+  "weapon": "弓",
+  "rarity": 5
+ },
+ "リネット": {
+  "element": "風",
+  "weapon": "片手剣",
+  "rarity": 4
+ },
+ "リンネア": {
+  "element": "岩",
+  "weapon": "弓",
+  "rarity": 5
+ },
+ "レイラ": {
+  "element": "氷",
+  "weapon": "片手剣",
+  "rarity": 4
+ },
+ "レザー": {
+  "element": "雷",
+  "weapon": "両手剣",
+  "rarity": 4
+ },
+ "ローエン": {
+  "element": "氷",
+  "weapon": "長柄武器",
+  "rarity": 5
+ },
+ "ロサリア": {
+  "element": "氷",
+  "weapon": "長柄武器",
+  "rarity": 4
+ },
+ "雲菫": {
+  "element": "岩",
+  "weapon": "長柄武器",
+  "rarity": 4
+ },
+ "煙緋": {
+  "element": "炎",
+  "weapon": "法器",
+  "rarity": 4
+ },
+ "嘉明": {
+  "element": "炎",
+  "weapon": "両手剣",
+  "rarity": 4
+ },
+ "甘雨": {
+  "element": "氷",
+  "weapon": "弓",
+  "rarity": 5
+ },
+ "閑雲": {
+  "element": "風",
+  "weapon": "法器",
+  "rarity": 5
+ },
+ "久岐忍": {
+  "element": "雷",
+  "weapon": "片手剣",
+  "rarity": 4
+ },
+ "凝光": {
+  "element": "岩",
+  "weapon": "法器",
+  "rarity": 4
+ },
+ "九条裟羅": {
+  "element": "雷",
+  "weapon": "弓",
+  "rarity": 4
+ },
+ "空": {
+  "element": "可変",
+  "weapon": "片手剣",
+  "rarity": 5
+ },
+ "蛍": {
+  "element": "可変",
+  "weapon": "片手剣",
+  "rarity": 5
+ },
+ "胡桃": {
+  "element": "炎",
+  "weapon": "長柄武器",
+  "rarity": 5
+ },
+ "荒瀧一斗": {
+  "element": "岩",
+  "weapon": "両手剣",
+  "rarity": 5
+ },
+ "行秋": {
+  "element": "水",
+  "weapon": "片手剣",
+  "rarity": 4
+ },
+ "香菱": {
+  "element": "炎",
+  "weapon": "長柄武器",
+  "rarity": 4
+ },
+ "刻晴": {
+  "element": "雷",
+  "weapon": "片手剣",
+  "rarity": 5
+ },
+ "珊瑚宮心海": {
+  "element": "水",
+  "weapon": "法器",
+  "rarity": 5
+ },
+ "鹿野院平蔵": {
+  "element": "風",
+  "weapon": "法器",
+  "rarity": 4
+ },
+ "七七": {
+  "element": "氷",
+  "weapon": "片手剣",
+  "rarity": 5
+ },
+ "重雲": {
+  "element": "氷",
+  "weapon": "両手剣",
+  "rarity": 4
+ },
+ "宵宮": {
+  "element": "炎",
+  "weapon": "弓",
+  "rarity": 5
+ },
+ "鍾離": {
+  "element": "岩",
+  "weapon": "長柄武器",
+  "rarity": 5
+ },
+ "申鶴": {
+  "element": "氷",
+  "weapon": "長柄武器",
+  "rarity": 5
+ },
+ "神里綾華": {
+  "element": "氷",
+  "weapon": "片手剣",
+  "rarity": 5
+ },
+ "神里綾人": {
+  "element": "水",
+  "weapon": "片手剣",
+  "rarity": 5
+ },
+ "辛炎": {
+  "element": "炎",
+  "weapon": "両手剣",
+  "rarity": 4
+ },
+ "千織": {
+  "element": "岩",
+  "weapon": "片手剣",
+  "rarity": 5
+ },
+ "早柚": {
+  "element": "風",
+  "weapon": "両手剣",
+  "rarity": 4
+ },
+ "白朮": {
+  "element": "草",
+  "weapon": "法器",
+  "rarity": 5
+ },
+ "八重神子": {
+  "element": "雷",
+  "weapon": "法器",
+  "rarity": 5
+ },
+ "楓原万葉": {
+  "element": "風",
+  "weapon": "片手剣",
+  "rarity": 5
+ },
+ "放浪者": {
+  "element": "風",
+  "weapon": "法器",
+  "rarity": 5
+ },
+ "北斗": {
+  "element": "雷",
+  "weapon": "両手剣",
+  "rarity": 4
+ },
+ "夢見月瑞希": {
+  "element": "風",
+  "weapon": "法器",
+  "rarity": 5
+ },
+ "夜蘭": {
+  "element": "水",
+  "weapon": "弓",
+  "rarity": 5
+ },
+ "雷電将軍": {
+  "element": "雷",
+  "weapon": "長柄武器",
+  "rarity": 5
+ },
+ "藍硯": {
+  "element": "風",
+  "weapon": "法器",
+  "rarity": 4
+ },
+ "旅人": {
+  "element": "可変",
+  "weapon": "片手剣",
+  "rarity": 5
+ },
+ "綺良々": {
+  "element": "草",
+  "weapon": "片手剣",
+  "rarity": 4
+ },
+ "兹白": {
+  "element": "岩",
+  "weapon": "片手剣",
+  "rarity": 5
+ },
+ "魈": {
+  "element": "風",
+  "weapon": "長柄武器",
+  "rarity": 5
+ }
+}
