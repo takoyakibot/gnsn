@@ -44,7 +44,7 @@ const store = {
 
 const state = {
   index: new Map(),
-  saved: null, // { characters, junk, format, savedAt }
+  saved: null, // { characters, format, savedAt }
   attached: [],
   elements: new Set(),
   weapons: new Set(),
@@ -247,21 +247,6 @@ function renderStatus() {
       ubox.append(code);
     }
   }
-
-  // 破棄したトークン。黙って捨てない。
-  const jbox = $('junk-box');
-  jbox.replaceChildren();
-  const junk = saved.junk ?? [];
-  jbox.hidden = junk.length === 0;
-  if (junk.length) {
-    jbox.append(document.createTextNode(`解析できず破棄した行が ${junk.length} 件あります: `));
-    for (const j of junk.slice(0, 40)) {
-      const code = document.createElement('code');
-      code.textContent = j;
-      jbox.append(code);
-    }
-    if (junk.length > 40) jbox.append(document.createTextNode(`ほか ${junk.length - 40} 件`));
-  }
 }
 
 function showRoster(saved) {
@@ -301,13 +286,15 @@ async function main() {
       $('import-note').textContent = 'テキストが空です。';
       return;
     }
-    const { characters, junk, format } = parse(text);
+    // junk（解析できなかった行）は画面には出さない。PC 版末尾の `11` のような
+    // 意味のない残骸まで並べても読む側の役に立たないため。
+    const { characters, format } = parse(text);
     if (characters.length === 0) {
       $('import-note').textContent =
         'キャラを 1 件も取得できませんでした。「Lv.90」のような行を含む形でコピーできているか確認してください。';
       return;
     }
-    const saved = { characters, junk, format, savedAt: Date.now() };
+    const saved = { characters, format, savedAt: Date.now() };
     store.save(saved);
     $('input').value = '';
     $('import-note').textContent = '';
@@ -322,7 +309,7 @@ async function main() {
   $('clear-btn').addEventListener('click', () => {
     store.clear();
     state.team = [];
-    showRoster({ characters: [], junk: [], format: null });
+    showRoster({ characters: [], format: null });
     $('input').value = '';
     showImport();
   });
