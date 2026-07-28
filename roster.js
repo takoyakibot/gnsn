@@ -6,6 +6,27 @@ import { matchKey } from './names.js';
 export const VARIABLE = '可変';
 export const UNKNOWN = '?';
 
+/**
+ * レベル帯。Lv.90 が上限なので 10 刻みで 9 帯。
+ * 元素・武器種の絞り込みと違い、こちらは「選んだ帯を隠す」除外方式で使う。
+ */
+export const LEVEL_BANDS = [
+  { key: '81-90', label: '90〜81', min: 81, max: 90 },
+  { key: '71-80', label: '80〜71', min: 71, max: 80 },
+  { key: '61-70', label: '70〜61', min: 61, max: 70 },
+  { key: '51-60', label: '60〜51', min: 51, max: 60 },
+  { key: '41-50', label: '50〜41', min: 41, max: 50 },
+  { key: '31-40', label: '40〜31', min: 31, max: 40 },
+  { key: '21-30', label: '30〜21', min: 21, max: 30 },
+  { key: '11-20', label: '20〜11', min: 11, max: 20 },
+  { key: '1-10', label: '10〜1', min: 1, max: 10 },
+];
+
+/** そのレベルが属する帯。範囲外（想定外の値）なら null。 */
+export function bandOf(level) {
+  return LEVEL_BANDS.find((b) => level >= b.min && level <= b.max) ?? null;
+}
+
 /** characters.json から照合キー索引を作る。 */
 export function buildIndex(data) {
   const index = new Map();
