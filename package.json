@@ -1,0 +1,14 @@
+{
+  "name": "gnsn",
+  "private": true,
+  "type": "module",
+  "description": "所持キャラ名鑑 — HoYoLAB の全キャラクター画面をペーストして所持キャラだけを並べる静的サイト",
+  "scripts": {
+    "build:data": "node tools/build.mjs",
+    "test": "node --test test/*.test.mjs",
+    "serve": "python3 -m http.server 8000"
+  },
+  "devDependencies": {
+    "genshin-db": "^5.2.12"
+  }
+}
