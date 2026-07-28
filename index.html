@@ -106,6 +106,20 @@
       .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
 
       .note { font-size: .8rem; color: var(--muted); margin: 6px 0 0; }
+
+      .howto {
+        margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line);
+        font-size: .84rem;
+      }
+      .howto summary {
+        cursor: pointer; color: var(--accent); font-weight: 600; font-size: .82rem;
+        width: fit-content;
+      }
+      .howto summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+      .howto ol { margin: 10px 0 0; padding-left: 1.5em; }
+      .howto li { margin-bottom: 8px; }
+      .howto .note { display: block; margin-top: 2px; }
+      .howto a { color: var(--accent); }
       .warn {
         border-left: 3px solid var(--el-岩); background: color-mix(in srgb, var(--el-岩) 8%, transparent);
         padding: 8px 12px; border-radius: 0 6px 6px 0; margin-top: 10px; font-size: .82rem;
@@ -271,7 +285,7 @@
         <h2>取り込み</h2>
         <textarea
           id="input"
-          placeholder="HoYoLAB 戦績ツールの「全キャラクター」画面を全選択してコピーし、ここに貼り付け。PC 版・スマホ版のどちらの形式でも読めます。"
+          placeholder="HoYoLAB 戦績の「全キャラクター」画面を全選択してコピーし、ここに貼り付け。PC 版・スマホ版のどちらの形式でも読めます。"
           spellcheck="false"
         ></textarea>
         <div class="row">
@@ -279,6 +293,38 @@
           <button id="cancel-btn" type="button" hidden>やめる</button>
           <span class="note" id="import-note"></span>
         </div>
+
+        <details class="howto" open>
+          <summary>どこからコピーするの？</summary>
+          <ol>
+            <li>
+              HoYoLAB にログインして、原神の<strong>戦績</strong>（Battle Chronicle）を開く。
+              <a
+                href="https://act.hoyolab.com/app/community-game-records-sea/index.html?bbs_presentation_style=fullscreen&amp;bbs_auth_required=true&amp;gid=2#/ys"
+                target="_blank"
+                rel="noopener noreferrer"
+                >戦績を開く</a
+              >
+              <span class="note">
+                HoYoLAB 側でゲームアカウントを連携し、戦績を有効にしておく必要があります。
+              </span>
+            </li>
+            <li>「キャラクター」の欄から<strong>全キャラクター</strong>の一覧を開く。</li>
+            <li>
+              画面のテキストを全部選択してコピーする。
+              <span class="note">
+                PC は Ctrl+A（Mac は ⌘+A）→ Ctrl+C。スマホは長押しして「すべて選択」→ コピー。
+                並び順やフィルターは変えなくて構いません。
+              </span>
+            </li>
+            <li>上の欄に貼り付けて「解析する」を押す。</li>
+          </ol>
+          <p class="note">
+            キャラクターの画像や余計な記号が一緒にコピーされても大丈夫です。読める行だけを拾います。
+            貼り付けたテキストはこのブラウザの中だけで処理され、どこにも送信しません。
+            ログインや cookie の連携も必要ありません。
+          </p>
+        </details>
       </section>
 
       <section class="panel" id="status-panel" hidden>
