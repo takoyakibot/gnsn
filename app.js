@@ -1,7 +1,17 @@
 // 画面まわり。解析・照合のロジックは parse.js / roster.js / names.js にある。
 
 import { parse } from './parse.js';
-import { attach, buildIndex, resonance, stats, unknownNames, UNKNOWN, VARIABLE } from './roster.js';
+import {
+  attach,
+  bandOf,
+  buildIndex,
+  LEVEL_BANDS,
+  resonance,
+  stats,
+  unknownNames,
+  UNKNOWN,
+  VARIABLE,
+} from './roster.js';
 import { availableToday, describe, moraRows } from './materials.js';
 import { matchKey } from './names.js';
 
@@ -78,6 +88,8 @@ const state = {
   attached: [],
   elements: new Set(),
   weapons: new Set(),
+  // レベル帯は「隠す帯」を持つ（元素・武器種の絞り込みとは逆向き）
+  hiddenBands: new Set(),
   sort: 'level',
   team: [], // 表示名の配列
   // 素材データは初回に素材を開いたときだけ取りに行く。棚の描画には要らないので
@@ -121,14 +133,48 @@ function renderFilters() {
   };
   build($('element-filter'), ELEMENTS, state.elements, 'element', true);
   build($('weapon-filter'), WEAPONS, state.weapons, 'weapon', false);
+  renderBandFilter();
+}
+
+/**
+ * レベル帯は「押すと隠れる」除外方式。元素・武器種と向きが逆なので、
+ * 取り消し線と文言で区別できるようにしている。
+ */
+function renderBandFilter() {
+  const host = $('level-filter');
+  const counts = new Map();
+  for (const c of state.attached) {
+    const band = bandOf(c.level);
+    if (band) counts.set(band.key, (counts.get(band.key) ?? 0) + 1);
+  }
+  for (const key of [...state.hiddenBands]) if (!counts.has(key)) state.hiddenBands.delete(key);
+
+  host.replaceChildren();
+  for (const band of LEVEL_BANDS.filter((b) => counts.has(b.key))) {
+    const hidden = state.hiddenBands.has(band.key);
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = hidden ? 'chip excluded' : 'chip';
+    b.textContent = `${band.label} (${counts.get(band.key)})`;
+    b.setAttribute('aria-pressed', String(hidden));
+    b.setAttribute('aria-label', `Lv.${band.label} を${hidden ? '表示' : '非表示'}にする`);
+    b.title = b.getAttribute('aria-label');
+    b.addEventListener('click', () => {
+      hidden ? state.hiddenBands.delete(band.key) : state.hiddenBands.add(band.key);
+      renderBandFilter();
+      renderShelf();
+    });
+    host.append(b);
+  }
 }
 
 function visible() {
-  const { elements, weapons, sort } = state;
+  const { elements, weapons, hiddenBands, sort } = state;
   const rows = state.attached.filter(
     (c) =>
       (elements.size === 0 || elements.has(c.element)) &&
-      (weapons.size === 0 || weapons.has(c.weapon)),
+      (weapons.size === 0 || weapons.has(c.weapon)) &&
+      !hiddenBands.has(bandOf(c.level)?.key),
   );
 
   const byName = (a, b) => a.name.localeCompare(b.name, 'ja');
@@ -173,21 +219,7 @@ function renderShelf() {
 
     card.append(name, meta, line);
     card.addEventListener('click', () => toggleTeam(c.name));
-
-    // 素材は別ボタンにする。カード本体のクリックは編成の出し入れのままにしておきたい。
-    // button の入れ子は不正な HTML なので、ラッパの中で兄弟として並べる。
-    const matBtn = document.createElement('button');
-    matBtn.type = 'button';
-    matBtn.className = 'mat-btn';
-    matBtn.textContent = '素材';
-    matBtn.title = `${c.name} の突破素材・天賦素材`;
-    matBtn.setAttribute('aria-label', `${c.name} の突破素材・天賦素材`);
-    matBtn.addEventListener('click', () => openMaterials(c));
-
-    const wrap = document.createElement('div');
-    wrap.className = 'card-wrap';
-    wrap.append(card, matBtn);
-    shelf.append(wrap);
+    shelf.append(card);
   }
 
   $('filter-count').textContent =
@@ -223,7 +255,17 @@ function renderTeam() {
       const meta = document.createElement('div');
       meta.className = 'meta';
       meta.textContent = `${c.element} · Lv.${c.level} · ${c.constellation}凸`;
-      slot.append(name, meta);
+
+      // 素材はここで見る。棚のカードは編成の出し入れだけに使う。
+      const matBtn = document.createElement('button');
+      matBtn.type = 'button';
+      matBtn.className = 'mat-btn';
+      matBtn.textContent = '素材';
+      matBtn.title = `${c.name} の突破素材・天賦素材`;
+      matBtn.setAttribute('aria-label', `${c.name} の突破素材・天賦素材`);
+      matBtn.addEventListener('click', () => openMaterials(c));
+
+      slot.append(name, meta, matBtn);
     } else {
       slot.textContent = '空き枠';
     }
@@ -563,6 +605,9 @@ async function main() {
     showImport();
   });
   $('team-clear').addEventListener('click', () => {
+    if (state.team.length === 0) return;
+    const names = state.team.join(' / ');
+    if (!confirm(`枠を空にします。よろしいですか？\n\n${names}`)) return;
     state.team = [];
     selectionStore.save(state.team);
     renderTeam();
@@ -575,6 +620,7 @@ async function main() {
   $('reset-filter').addEventListener('click', () => {
     state.elements.clear();
     state.weapons.clear();
+    state.hiddenBands.clear();
     renderFilters();
     renderShelf();
   });

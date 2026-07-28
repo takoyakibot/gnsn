@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
 
 import { parse } from '../parse.js';
 import { matchKey, norm } from '../names.js';
-import { buildIndex, attach, unknownNames, resonance, stats } from '../roster.js';
+import { buildIndex, attach, unknownNames, resonance, stats, bandOf, LEVEL_BANDS } from '../roster.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
@@ -188,6 +188,45 @@ test('属性データ全件で照合キーが衝突しない', () => {
     assert.equal(seen.has(key), false, `${seen.get(key)} と ${name} が同じキーになる`);
     seen.set(key, name);
   }
+});
+
+// --- レベル帯 -------------------------------------------------------------
+
+test('レベル帯は Lv.1〜90 を隙間も重なりもなく覆う', () => {
+  for (let level = 1; level <= 90; level++) {
+    const hit = LEVEL_BANDS.filter((b) => level >= b.min && level <= b.max);
+    assert.equal(hit.length, 1, `Lv.${level} が ${hit.length} 個の帯に該当する`);
+  }
+});
+
+test('レベル帯の境界が正しい', () => {
+  assert.equal(bandOf(90).label, '90〜81');
+  assert.equal(bandOf(81).label, '90〜81');
+  assert.equal(bandOf(80).label, '80〜71');
+  assert.equal(bandOf(63).label, '70〜61');
+  assert.equal(bandOf(10).label, '10〜1');
+  assert.equal(bandOf(1).label, '10〜1');
+});
+
+test('範囲外のレベルは帯なしになる', () => {
+  assert.equal(bandOf(0), null);
+  assert.equal(bandOf(91), null);
+});
+
+test('検証用ロスターの全員がいずれかの帯に入る', () => {
+  const orphans = parse(PC).characters.filter((c) => bandOf(c.level) === null);
+  assert.deepEqual(orphans.map((c) => `${c.name}(Lv.${c.level})`), []);
+});
+
+test('帯を除外すると該当キャラだけが消える', () => {
+  const characters = parse(PC).characters;
+  const hidden = new Set(['1-10']);
+  const shown = characters.filter((c) => !hidden.has(bandOf(c.level)?.key));
+  const removed = characters.filter((c) => hidden.has(bandOf(c.level)?.key));
+  assert.ok(removed.length > 0, 'Lv.1〜10 のキャラが検証データに居ない');
+  assert.equal(shown.length + removed.length, characters.length);
+  assert.equal(removed.every((c) => c.level <= 10), true);
+  assert.equal(shown.every((c) => c.level > 10), true);
 });
 
 test('統計値が数え上げられる', () => {
