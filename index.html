@@ -151,8 +151,15 @@
       }
 
       .grid {
+        /* --card-min はカード 2 行目（元素・武器種・Lv・凸・★）が折り返さない幅。
+           狭めるとメタ情報が 2 行に割れる。 */
+        --card-min: 178px;
         display: grid; gap: 8px;
-        grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(var(--card-min), 1fr));
+      }
+      @media (max-width: 420px) {
+        /* 1 行に収まらない幅では 1 列にして、折り返しより横幅を優先する */
+        .grid { grid-template-columns: 1fr; }
       }
       .card {
         text-align: left; padding: 9px 11px; border-radius: 8px;

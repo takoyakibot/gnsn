@@ -205,19 +205,17 @@ function renderShelf() {
     name.className = 'name';
     name.textContent = c.name;
 
+    // 元素・武器種・レベル・凸・レアリティを 1 行に収める。
+    // 折り返さない幅をグリッド側（--card-min）で確保している。
     const meta = document.createElement('div');
     meta.className = 'meta';
     const el = document.createElement('span');
     el.className = 'el';
     el.textContent = c.element;
-    meta.append(el, document.createTextNode(` · ${c.weapon}`));
-
-    const line = document.createElement('div');
-    line.className = 'meta';
     const rarity = c.rarity === null ? '★?' : `★${c.rarity}`;
-    line.textContent = `Lv.${c.level} · ${c.constellation}凸 · ${rarity}`;
+    meta.append(el, document.createTextNode(`·${c.weapon} Lv.${c.level} ${c.constellation}凸 ${rarity}`));
 
-    card.append(name, meta, line);
+    card.append(name, meta);
     card.addEventListener('click', () => toggleTeam(c.name));
     shelf.append(card);
   }
