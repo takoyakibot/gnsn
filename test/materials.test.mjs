@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 
 import { parse } from '../parse.js';
 import { matchKey } from '../names.js';
-import { availableToday, describe, domainWeekday, moraRows } from '../materials.js';
+import { aggregate, availableToday, describe, domainWeekday, moraRows } from '../materials.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
@@ -199,6 +199,87 @@ test('describe() はドロップ元が食い違えば各節に残す', () => {
   assert.equal(d.common, null);
   assert.ok(d.ascension.sections.some((s) => s.key === 'common'));
   assert.ok(d.talent.sections.some((s) => s.key === 'common'));
+});
+
+// --- aggregate() ----------------------------------------------------------
+
+const pick = (...names) => names.map((name) => ({ name, entry: MATERIALS[name] }));
+
+test('aggregate() は同じ素材を 1 つに畳んで必要なキャラを並べる', () => {
+  // 香菱 と ベネット は元素も国も同じで、共通素材（スライム）と冠が重なる
+  const { sections } = aggregate(pick('香菱', 'ベネット'));
+  const crown = sections.find((s) => s.key === 'crown');
+  assert.equal(crown.items.length, 1, '冠が 2 行に割れている');
+  assert.deepEqual(crown.items[0], {
+    name: '知恵の冠',
+    from: null,
+    characters: ['香菱', 'ベネット'],
+  });
+});
+
+test('aggregate() は違う素材を別行にする', () => {
+  const { sections } = aggregate(pick('香菱', '兹白'));
+  const gem = sections.find((s) => s.key === 'gem');
+  assert.deepEqual(
+    gem.items.map((i) => [i.name, i.characters]),
+    [
+      ['炎願のアゲート', ['香菱']],
+      ['堅牢なトパーズ', ['兹白']],
+    ],
+  );
+});
+
+test('aggregate() の節は定義順に並び、空の節は出ない', () => {
+  const { sections } = aggregate(pick('香菱'));
+  assert.deepEqual(sections.map((s) => s.key), [
+    'gem',
+    'boss',
+    'local',
+    'book',
+    'weeklyBoss',
+    'crown',
+    'common',
+  ]);
+  // 旅人は天賦データが無いので天賦側の節が出ない
+  const t = aggregate(pick('旅人'));
+  assert.deepEqual(t.sections.map((s) => s.key), ['gem', 'local', 'common']);
+});
+
+test('aggregate() は入手元を保つ', () => {
+  const { sections } = aggregate(pick('香菱'));
+  const boss = sections.find((s) => s.key === 'boss');
+  assert.deepEqual(boss.items[0], { name: '常燃の火種', from: '爆炎樹', characters: ['香菱'] });
+});
+
+test('aggregate() は秘境をまとめ、同じ秘境のキャラを並べる', () => {
+  const { domains } = aggregate(pick('香菱', '兹白'));
+  assert.equal(domains.length, 2);
+  const fire = domains.find((d) => d.domain === '熟知秘境：深炎の底');
+  assert.deepEqual(fire.characters, ['香菱']);
+  assert.deepEqual(fire.days, ['火曜', '金曜', '日曜']);
+});
+
+test('aggregate() はデータの欠けを黙って飲み込まない', () => {
+  const r = aggregate([
+    ...pick('旅人', 'ドール（女）'),
+    { name: '未収録キャラ', entry: undefined },
+  ]);
+  assert.deepEqual(r.noData, ['未収録キャラ']);
+  assert.deepEqual(r.partial, [
+    { name: '旅人', lacking: ['天賦'] },
+    { name: 'ドール（女）', lacking: ['突破'] },
+  ]);
+});
+
+test('aggregate() は空でも落ちない', () => {
+  assert.deepEqual(aggregate([]), { sections: [], domains: [], noData: [], partial: [] });
+});
+
+test('aggregate() は同じキャラを二重に数えない', () => {
+  // 共通素材は突破と天賦の両方に入っているので、素朴に集めると 2 回入る
+  const { sections } = aggregate(pick('香菱'));
+  const common = sections.find((s) => s.key === 'common');
+  assert.deepEqual(common.items[0].characters, ['香菱']);
 });
 
 // --- モラ早見表 -----------------------------------------------------------

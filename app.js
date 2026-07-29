@@ -12,7 +12,7 @@ import {
   UNKNOWN,
   VARIABLE,
 } from './roster.js';
-import { availableToday, describe, moraRows } from './materials.js';
+import { aggregate, availableToday, describe, moraRows } from './materials.js';
 import { matchKey } from './names.js';
 
 const STORAGE_KEY = 'gnsn.roster.v1';
@@ -296,6 +296,94 @@ function renderTeam() {
     n.textContent = `${variable.map((c) => c.name).join(' / ')} は元素が確定しないため共鳴判定から除外しています。`;
     box.append(n);
   }
+
+  renderPickedMaterials(members);
+}
+
+/**
+ * 選択中のキャラに必要な素材をまとめて出す。枠の下のアコーディオン。
+ * 開いたときに初めて素材データを取りに行く（棚の描画には要らないため）。
+ */
+async function renderPickedMaterials(members) {
+  const box = $('picked-mats');
+  const summary = $('picked-mats-summary');
+  const body = $('picked-mats-body');
+
+  box.hidden = members.length === 0;
+  if (members.length === 0) {
+    box.open = false;
+    body.replaceChildren();
+    return;
+  }
+
+  summary.textContent = `選択中の ${members.length} 人に必要な素材`;
+  if (!box.open) return; // 開くまでは中身を作らない（データも読まない）
+
+  await loadMaterials();
+  body.replaceChildren();
+
+  if (state.materialsError) {
+    const p = document.createElement('p');
+    p.className = 'dlg-missing';
+    p.textContent = state.materialsError;
+    body.append(p);
+    return;
+  }
+
+  const picks = members.map((c) => ({ name: c.name, entry: state.materials?.get(matchKey(c.name)) }));
+  const { sections, domains, noData, partial } = aggregate(picks);
+
+  for (const s of sections) {
+    body.append(
+      materialGroup(
+        s.label,
+        s.items.map((i) => ({ ...i, who: i.characters })),
+      ),
+    );
+  }
+
+  // 天賦本の秘境は 1 行にまとめる。「今日回れるか」は該当する秘境に小さなバッジを
+  // 付けるだけに留める（主軸にしない）。
+  if (domains.length) {
+    const row = document.createElement('div');
+    row.className = 'mat-group';
+    const label = document.createElement('span');
+    label.textContent = '秘境';
+    const list = document.createElement('div');
+    list.className = 'mat-items';
+
+    const now = new Date();
+    for (const d of domains) {
+      const chip = document.createElement('span');
+      chip.className = 'mat-item';
+      const b = document.createElement('b');
+      b.textContent = d.domain;
+      chip.append(b);
+      if (d.days?.length) {
+        chip.append(document.createTextNode(` ${d.days.map((x) => x.replace('曜', '')).join('・')}`));
+      }
+      if (availableToday(d.days, now)) chip.append(document.createTextNode(' '), badge('今日', true));
+      const who = document.createElement('span');
+      who.className = 'mat-who';
+      who.textContent = `（${d.characters.join('・')}）`;
+      chip.append(who);
+      list.append(chip);
+    }
+    row.append(label, list);
+    body.append(row);
+  }
+
+  // 「素材が要らない」と「データが無い」を混同させないため、欠けは明示する。
+  const gaps = [
+    ...noData.map((name) => `${name}: 素材データがありません`),
+    ...partial.map((p) => `${p.name}: ${p.lacking.join('・')}素材のデータがありません`),
+  ];
+  for (const text of gaps) {
+    const n = document.createElement('p');
+    n.className = 'note';
+    n.textContent = `${text}。`;
+    body.append(n);
+  }
 }
 
 // --- 素材（突破・天賦） ----------------------------------------------------
@@ -335,6 +423,13 @@ function materialGroup(label, items) {
       from.className = 'mat-from';
       from.textContent = it.from;
       chip.append(document.createTextNode(' '), from);
+    }
+    // まとめ表示では、その素材が誰に必要なのかを添える。
+    if (it.who?.length) {
+      const who = document.createElement('span');
+      who.className = 'mat-who';
+      who.textContent = `（${it.who.join('・')}）`;
+      chip.append(who);
     }
     list.append(chip);
   }
@@ -623,6 +718,10 @@ async function main() {
     renderShelf();
   });
   $('mat-close').addEventListener('click', () => $('mat-dialog').close());
+  // 開いた瞬間に中身を作る。閉じている間はデータも読まない。
+  $('picked-mats').addEventListener('toggle', () => {
+    if ($('picked-mats').open) renderTeam();
+  });
   $('mora-btn').addEventListener('click', openMora);
   $('mora-close').addEventListener('click', () => $('mora-dialog').close());
   $('mora-dialog').addEventListener('click', (e) => {

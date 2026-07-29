@@ -214,6 +214,17 @@
       .resonance { margin-top: 10px; font-size: .85rem; }
       .resonance .none { color: var(--muted); }
 
+      /* 選択中のキャラに必要な素材のまとめ。枠のすぐ下に折りたたんで置く。 */
+      .picked-mats { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+      .picked-mats summary {
+        cursor: pointer; color: var(--accent); font-weight: 600; font-size: .82rem;
+        width: fit-content;
+      }
+      .picked-mats summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+      .picked-mats > div { margin-top: 10px; }
+      .mat-who { color: var(--muted); font-size: .92em; }
+      .mat-who::before { content: ' '; }
+
       dialog {
         border: 1px solid var(--line); border-radius: var(--radius);
         background: var(--panel); color: var(--ink);
@@ -371,6 +382,10 @@
         <h2>編成メモ / 育成予定</h2>
         <div class="team" id="team"></div>
         <div class="resonance" id="resonance"></div>
+        <details class="picked-mats" id="picked-mats" hidden>
+          <summary id="picked-mats-summary"></summary>
+          <div id="picked-mats-body"></div>
+        </details>
         <div class="row">
           <button id="team-clear" type="button">枠を空にする</button>
           <span class="note">選んだ 4 人は保存されるので、次に開いたときもそのままです。</span>
