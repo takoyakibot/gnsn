@@ -120,6 +120,15 @@
       .howto li { margin-bottom: 8px; }
       .howto .note { display: block; margin-top: 2px; }
       .howto a { color: var(--accent); }
+      .howto-lead { margin: 10px 0 0; }
+      .howto-link {
+        display: inline-block; padding: 5px 12px; border-radius: 6px;
+        border: 1px solid var(--accent); text-decoration: none; font-weight: 600;
+        font-size: .85rem;
+      }
+      .howto-link:hover { background: var(--accent); color: var(--panel); }
+      @media (prefers-color-scheme: dark) { .howto-link:hover { color: #1a1917; } }
+      .howto-login { margin-top: 8px; }
       .warn {
         border-left: 3px solid var(--el-岩); background: color-mix(in srgb, var(--el-岩) 8%, transparent);
         padding: 8px 12px; border-radius: 0 6px 6px 0; margin-top: 10px; font-size: .82rem;
@@ -307,22 +316,27 @@
 
         <details class="howto" open>
           <summary>どこからコピーするの？</summary>
+          <p class="howto-lead">
+            <a
+              class="howto-link"
+              href="https://act.hoyolab.com/app/community-game-records-sea/index.html?bbs_presentation_style=fullscreen&amp;bbs_auth_required=true&amp;gid=2#/ys/role/all"
+              target="_blank"
+              rel="noopener noreferrer"
+              >HoYoLAB の「全キャラクター」を開く</a
+            >
+          </p>
+          <p class="note howto-login">
+            <strong>HoYoLAB へのログインが必要です。</strong>
+            あわせて HoYoLAB 側でゲームアカウントを連携し、戦績（Battle Chronicle）を公開設定にしておいてください。
+            リンクが自分の戦績に飛ばない場合は、HoYoLAB のプロフィール →
+            戦績 → 原神 → マイキャラクターの「全キャラクター」から開けます。
+          </p>
           <ol>
             <li>
-              HoYoLAB にログインして、原神の<strong>戦績</strong>（Battle Chronicle）を開く。
-              <a
-                href="https://act.hoyolab.com/app/community-game-records-sea/index.html?bbs_presentation_style=fullscreen&amp;bbs_auth_required=true&amp;gid=2#/ys"
-                target="_blank"
-                rel="noopener noreferrer"
-                >戦績を開く</a
-              >
-              <span class="note">
-                HoYoLAB 側でゲームアカウントを連携し、戦績を有効にしておく必要があります。
-              </span>
+              上のリンクで<strong>全キャラクター</strong>の一覧を開く。
             </li>
-            <li>「キャラクター」の欄から<strong>全キャラクター</strong>の一覧を開く。</li>
             <li>
-              画面のテキストを全部選択してコピーする。
+              そのページのテキストを全部選択してコピーする。
               <span class="note">
                 PC は Ctrl+A（Mac は ⌘+A）→ Ctrl+C。スマホは長押しして「すべて選択」→ コピー。
                 並び順やフィルターは変えなくて構いません。
@@ -333,7 +347,7 @@
           <p class="note">
             キャラクターの画像や余計な記号が一緒にコピーされても大丈夫です。読める行だけを拾います。
             貼り付けたテキストはこのブラウザの中だけで処理され、どこにも送信しません。
-            ログインや cookie の連携も必要ありません。
+            このサイト側でのログインや cookie の連携は必要ありません。
           </p>
         </details>
       </section>

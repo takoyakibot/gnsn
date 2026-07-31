@@ -331,7 +331,7 @@ async function renderPickedMaterials(members) {
   }
 
   const picks = members.map((c) => ({ name: c.name, entry: state.materials?.get(matchKey(c.name)) }));
-  const { sections, domains, noData, partial } = aggregate(picks);
+  const { sections, noData, partial, elementVariant } = aggregate(picks);
 
   for (const s of sections) {
     body.append(
@@ -342,41 +342,13 @@ async function renderPickedMaterials(members) {
     );
   }
 
-  // 天賦本の秘境は 1 行にまとめる。「今日回れるか」は該当する秘境に小さなバッジを
-  // 付けるだけに留める（主軸にしない）。
-  if (domains.length) {
-    const row = document.createElement('div');
-    row.className = 'mat-group';
-    const label = document.createElement('span');
-    label.textContent = '秘境';
-    const list = document.createElement('div');
-    list.className = 'mat-items';
-
-    const now = new Date();
-    for (const d of domains) {
-      const chip = document.createElement('span');
-      chip.className = 'mat-item';
-      const b = document.createElement('b');
-      b.textContent = d.domain;
-      chip.append(b);
-      if (d.days?.length) {
-        chip.append(document.createTextNode(` ${d.days.map((x) => x.replace('曜', '')).join('・')}`));
-      }
-      if (availableToday(d.days, now)) chip.append(document.createTextNode(' '), badge('今日', true));
-      const who = document.createElement('span');
-      who.className = 'mat-who';
-      who.textContent = `（${d.characters.join('・')}）`;
-      chip.append(who);
-      list.append(chip);
-    }
-    row.append(label, list);
-    body.append(row);
-  }
-
   // 「素材が要らない」と「データが無い」を混同させないため、欠けは明示する。
   const gaps = [
     ...noData.map((name) => `${name}: 素材データがありません`),
     ...partial.map((p) => `${p.name}: ${p.lacking.join('・')}素材のデータがありません`),
+    ...elementVariant.map(
+      (name) => `${name}: 天賦素材は元素ごとに別物なので、まとめには入れていません（素材ボタンで見られます）`,
+    ),
   ];
   for (const text of gaps) {
     const n = document.createElement('p');
@@ -423,6 +395,20 @@ function materialGroup(label, items) {
       from.className = 'mat-from';
       from.textContent = it.from;
       chip.append(document.createTextNode(' '), from);
+    }
+    // 天賦本は系統ごとに秘境と曜日が違う。旅人は 1 元素で 3 系統を要するので、
+    // 素材ごとに出さないと「いつ回れるのか」が分からなくなる。
+    if (it.domain) {
+      const dom = document.createElement('span');
+      dom.className = 'mat-from';
+      dom.textContent = it.domain;
+      chip.append(document.createTextNode(' '), dom);
+    }
+    if (it.days?.length) {
+      chip.append(document.createTextNode(` ${it.days.map((d) => d.replace('曜', '')).join('・')}`));
+      if (availableToday(it.days, new Date())) {
+        chip.append(document.createTextNode(' '), badge('今日', true));
+      }
     }
     // まとめ表示では、その素材が誰に必要なのかを添える。
     if (it.who?.length) {
@@ -493,29 +479,28 @@ async function openMaterials(character) {
     return;
   }
 
-  const { ascension, talent, common } = describe(entry);
+  const { ascension, talents, common } = describe(entry);
   body.append(materialBlock('突破素材', ascension));
 
-  // 天賦本の秘境と曜日。「今日回れるか」は小さなバッジに留める（主軸にしない）。
-  const extras = [];
-  if (talent.domain) extras.push(badge(talent.domain, false));
-  if (talent.days?.length) {
-    extras.push(badge(talent.days.map((d) => d.replace('曜', '')).join('・'), false));
-    if (availableToday(talent.days, new Date())) extras.push(badge('今日', true));
+  // 元素可変キャラは天賦素材が元素ごとに別物なので、元素ごとに節を分ける。
+  for (const t of talents) {
+    body.append(materialBlock(t.element ? `天賦素材（${t.element}）` : '天賦素材', t));
   }
-  body.append(materialBlock('天賦素材', talent, extras));
 
-  // 雑魚ドロップは突破と天賦で同じなので、まとめて一度だけ出す。
+  // 雑魚ドロップが突破と天賦で同じ場合だけ、まとめて一度だけ出す。
   if (common?.length) {
     body.append(materialBlock('共通', { missing: false, sections: [{ label: 'ドロップ元', items: common }] }));
   }
 
-  if (talent.days?.length) {
-    const note = document.createElement('p');
-    note.className = 'dlg-note';
-    note.textContent = '秘境の曜日は端末の日付と 04:00 切り替わりで判定しています。';
-    body.append(note);
+  const note = document.createElement('p');
+  note.className = 'dlg-note';
+  note.textContent = '秘境の曜日は端末の日付と 04:00 切り替わりで判定しています。';
+  if (talents.length > 1) {
+    note.textContent =
+      `天賦素材は元素ごとに別の素材が必要です（${talents.map((t) => t.element).join('・')}）。` +
+      ' ' + note.textContent;
   }
+  body.append(note);
 
   dialog.showModal();
 }

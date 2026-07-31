@@ -85,6 +85,8 @@ function stripTier(name) {
 const SOURCE_PATTERNS = [
   /^(?:Lv\.\d+以上の)?(.+?)(?:（Lv\.\d+以上）)?(?:が|から)ドロップ$/,
   /^(?:Lv\.\d+以上の)?(.+?)(?:（Lv\.\d+以上）)?挑戦報酬$/,
+  // 炎元素旅人の週ボス枠（星と炎の礎石）はボスではなく任務報酬で手に入る
+  /^(.+?)をクリアした後に獲得$/,
 ];
 
 function dropSource(name) {
@@ -101,7 +103,11 @@ function dropSource(name) {
 const WITH_SOURCE = new Set(['boss', 'weeklyBoss']);
 
 // 畳んだ結果が 1 つになるべき種別。命名規則が変わったら気づけるようにする。
-const MUST_COLLAPSE = { gem: '宝石', book: '天賦本', common: '共通素材' };
+//
+// 天賦本は含めない。旅人は 1 元素あたり 3 系統すべてを必要とするため
+// （風なら「自由」「抗争」「詩文」）、1 つに畳めるのは通常キャラだけ。
+// 畳み損ねは MUST_COLLAPSE ではなく「接尾辞が残っていないか」で検出する。
+const MUST_COLLAPSE = { gem: '宝石', common: '共通素材' };
 
 /**
  * costs（ascend1..6 もしくは lvl2..10）を素材種別ごとに畳み込む。
@@ -110,9 +116,7 @@ const MUST_COLLAPSE = { gem: '宝石', book: '天賦本', common: '共通素材'
  * 素材が 1 つも無ければ null を返す（genshin-db 側にデータが無いキャラがいる）。
  */
 function collect(costs, section, characterName, problems) {
-  const groups = {};
-  let domain = null;
-  let days = null;
+  const groups = {}; // 種別 -> Map(畳んだ名前 -> 付随情報)
 
   for (const items of Object.values(costs ?? {})) {
     for (const { name } of items) {
@@ -127,23 +131,43 @@ function collect(costs, section, characterName, problems) {
         continue;
       }
       if (kind === 'mora') continue; // 別テーブルへ
-      if (kind === 'book') {
-        domain ??= material.dropDomainName;
-        days ??= material.daysOfWeek;
-      }
+
       // 共通素材はドロップ元の敵名へ、それ以外は段階の接尾辞を落として畳む。
       const collapsed = kind === 'common' ? dropSource(name) : stripTier(name);
       if (!collapsed) {
         problems.push(`${characterName}: 素材 "${name}" の入手元が取れない`);
         continue;
       }
-      const from = WITH_SOURCE.has(kind) ? dropSource(name) : null;
-      if (WITH_SOURCE.has(kind) && !from) {
-        problems.push(`${characterName}: 素材 "${name}" の入手元が取れない`);
+      if (kind !== 'common' && TIER_SUFFIXES.some((re) => re.test(collapsed))) {
+        problems.push(
+          `${characterName}: 素材 "${name}" の段階接尾辞を落としきれていない（${collapsed}）。` +
+            'tools/build.mjs の TIER_SUFFIXES を見直すこと',
+        );
         continue;
       }
+
+      const extra = {};
+      if (WITH_SOURCE.has(kind)) {
+        const from = dropSource(name);
+        if (!from) {
+          problems.push(`${characterName}: 素材 "${name}" の入手元が取れない`);
+          continue;
+        }
+        extra.from = from;
+      }
+      // 天賦本は系統ごとに秘境の曜日が違う。旅人は 1 元素で 3 系統を必要とし、
+      // 系統ごとに別の曜日になるため、グループ単位ではなく素材ごとに持たせる。
+      if (kind === 'book') {
+        if (!material.dropDomainName) {
+          problems.push(`${characterName}: 天賦本 "${name}" に秘境情報が無い`);
+          continue;
+        }
+        extra.domain = material.dropDomainName;
+        extra.days = material.daysOfWeek ?? null;
+      }
+
       groups[kind] ??= new Map();
-      groups[kind].set(collapsed, from);
+      groups[kind].set(collapsed, extra);
     }
   }
 
@@ -157,11 +181,35 @@ function collect(costs, section, characterName, problems) {
   }
 
   if (Object.keys(groups).length === 0) return null;
-  const entries = Object.entries(groups).map(([kind, items]) => [
-    kind,
-    [...items].map(([name, from]) => (from ? { name, from } : { name })),
-  ]);
-  return { ...Object.fromEntries(entries), ...(domain ? { domain, days } : {}) };
+  return Object.fromEntries(
+    Object.entries(groups).map(([kind, items]) => [
+      kind,
+      [...items].map(([name, extra]) => ({ name, ...extra })),
+    ]),
+  );
+}
+
+/**
+ * genshin-db は元素可変キャラの天賦を元素別に持っている。
+ * `characters` 側は「空 / 蛍」だが、`talents` 側は「旅人 (風元素)」のような名前で、
+ * 同じ名前では引けない。ここで元素ごとの一覧を作る。
+ *
+ *   { 旅人: { 風: '旅人 (風元素)', 岩: '旅人 (岩元素)', ... } }
+ *
+ * 氷はゲーム内に未実装で、genshin-db にも空のエントリしかないため落とす。
+ */
+function elementVariants() {
+  const map = new Map();
+  for (const name of gdb.talents('names', { ...JP, matchCategories: true })) {
+    const m = name.match(/^(.+?) \((.+?)元素\)$/);
+    if (!m) continue;
+    const [, base, element] = m;
+    // costs が空のものは未実装。持たせると「素材なし」と区別できなくなる。
+    if (!Object.keys(gdb.talents(name, JP)?.costs ?? {}).length) continue;
+    if (!map.has(base)) map.set(base, new Map());
+    map.get(base).set(element, name);
+  }
+  return map;
 }
 
 /**
@@ -210,6 +258,19 @@ const materials = {};
 const unresolved = [];
 const problems = [];
 
+// characters 側の名前 -> talents 側の基準名（元素可変キャラの橋渡し）
+const talentAliases = JSON.parse(readFileSync(join(ROOT, 'tools/talent-aliases.json'), 'utf8'));
+const VARIANTS_BY_BASE = elementVariants();
+
+for (const [character, base] of Object.entries(talentAliases)) {
+  if (!VARIANTS_BY_BASE.has(base)) {
+    problems.push(`talent-aliases.json: ${character} -> ${base} の元素別天賦が genshin-db に無い`);
+  }
+}
+if (problems.length) {
+  fail('天賦の別名テーブルの参照先が壊れている', problems);
+}
+
 for (const name of names) {
   const c = gdb.characters(name, JP);
   if (!c?.name || !c.elementText || !c.weaponText || !c.rarity) {
@@ -223,11 +284,33 @@ for (const name of names) {
   };
 
   // 素材は突破と天賦で別に集める。データが無いキャラもいるので節ごとに省略可とする。
-  // 例: ドール（男/女）は突破コストがモラ 0 のみ、旅人（空/蛍）は天賦データが無い。
+  // 例: ドール（男/女）は突破コストがモラ 0 のみ。
   const ascension = collect(c.costs, 'ascension', c.name, problems);
-  const talent = collect(gdb.talents(c.name, JP)?.costs, 'talent', c.name, problems);
-  if (ascension || talent) {
-    materials[c.name] = { ...(ascension ? { ascension } : {}), ...(talent ? { talent } : {}) };
+
+  // 天賦は元素可変キャラだけ元素別に分かれている。talents 側の名前が characters 側と
+  // 異なる（空 / 蛍 に対して 旅人 (風元素)）ため、talent-aliases.json で橋渡しする。
+  const talentBase = talentAliases[c.name] ?? c.name;
+  const variants = VARIANTS_BY_BASE.get(talentBase);
+  let talent = null;
+  let talentByElement = null;
+
+  if (variants) {
+    talentByElement = {};
+    for (const [element, talentName] of variants) {
+      const got = collect(gdb.talents(talentName, JP)?.costs, 'talent', `${c.name}(${element})`, problems);
+      if (got) talentByElement[element] = got;
+    }
+    if (Object.keys(talentByElement).length === 0) talentByElement = null;
+  } else {
+    talent = collect(gdb.talents(talentBase, JP)?.costs, 'talent', c.name, problems);
+  }
+
+  if (ascension || talent || talentByElement) {
+    materials[c.name] = {
+      ...(ascension ? { ascension } : {}),
+      ...(talent ? { talent } : {}),
+      ...(talentByElement ? { talentByElement } : {}),
+    };
   }
 }
 
@@ -305,7 +388,8 @@ writeFileSync(
 
 const variable = Object.entries(sorted).filter(([, v]) => v.element === VARIABLE_ELEMENT);
 const noAscension = Object.entries(sortedMaterials).filter(([, v]) => !v.ascension);
-const noTalent = Object.entries(sortedMaterials).filter(([, v]) => !v.talent);
+const noTalent = Object.entries(sortedMaterials).filter(([, v]) => !v.talent && !v.talentByElement);
+const byElement = Object.entries(sortedMaterials).filter(([, v]) => v.talentByElement);
 const noMaterials = Object.keys(sorted).filter((k) => !sortedMaterials[k]);
 
 console.log(`[build:data] ${Object.keys(sorted).length} 件を data/characters.json に書き出した`);
@@ -316,4 +400,7 @@ console.log(`[build:data] ${Object.keys(sortedMaterials).length} 件を data/mat
 console.log(`  モラ早見表（全キャラ共通）: 突破 ${mora.ascension?.length ?? 0} 段階 / 天賦 ${mora.talent?.length ?? 0} 段階`);
 if (noAscension.length) console.log(`  突破素材データなし: ${noAscension.map(([k]) => k).join(' / ')}`);
 if (noTalent.length) console.log(`  天賦素材データなし: ${noTalent.map(([k]) => k).join(' / ')}`);
+for (const [name, v] of byElement) {
+  console.log(`  天賦素材が元素別: ${name}（${Object.keys(v.talentByElement).join(' / ')}）`);
+}
 if (noMaterials.length) console.log(`  素材データなし: ${noMaterials.join(' / ')}`);
