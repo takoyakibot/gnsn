@@ -12,7 +12,7 @@ import {
   UNKNOWN,
   VARIABLE,
 } from './roster.js';
-import { availableToday, describe, moraRows } from './materials.js';
+import { aggregate, availableToday, describe, moraRows } from './materials.js';
 import { matchKey } from './names.js';
 
 const STORAGE_KEY = 'gnsn.roster.v1';
@@ -296,6 +296,66 @@ function renderTeam() {
     n.textContent = `${variable.map((c) => c.name).join(' / ')} は元素が確定しないため共鳴判定から除外しています。`;
     box.append(n);
   }
+
+  renderPickedMaterials(members);
+}
+
+/**
+ * 選択中のキャラに必要な素材をまとめて出す。枠の下のアコーディオン。
+ * 開いたときに初めて素材データを取りに行く（棚の描画には要らないため）。
+ */
+async function renderPickedMaterials(members) {
+  const box = $('picked-mats');
+  const summary = $('picked-mats-summary');
+  const body = $('picked-mats-body');
+
+  box.hidden = members.length === 0;
+  if (members.length === 0) {
+    box.open = false;
+    body.replaceChildren();
+    return;
+  }
+
+  summary.textContent = `選択中の ${members.length} 人に必要な素材`;
+  if (!box.open) return; // 開くまでは中身を作らない（データも読まない）
+
+  await loadMaterials();
+  body.replaceChildren();
+
+  if (state.materialsError) {
+    const p = document.createElement('p');
+    p.className = 'dlg-missing';
+    p.textContent = state.materialsError;
+    body.append(p);
+    return;
+  }
+
+  const picks = members.map((c) => ({ name: c.name, entry: state.materials?.get(matchKey(c.name)) }));
+  const { sections, noData, partial, elementVariant } = aggregate(picks);
+
+  for (const s of sections) {
+    body.append(
+      materialGroup(
+        s.label,
+        s.items.map((i) => ({ ...i, who: i.characters })),
+      ),
+    );
+  }
+
+  // 「素材が要らない」と「データが無い」を混同させないため、欠けは明示する。
+  const gaps = [
+    ...noData.map((name) => `${name}: 素材データがありません`),
+    ...partial.map((p) => `${p.name}: ${p.lacking.join('・')}素材のデータがありません`),
+    ...elementVariant.map(
+      (name) => `${name}: 天賦素材は元素ごとに別物なので、まとめには入れていません（素材ボタンで見られます）`,
+    ),
+  ];
+  for (const text of gaps) {
+    const n = document.createElement('p');
+    n.className = 'note';
+    n.textContent = `${text}。`;
+    body.append(n);
+  }
 }
 
 // --- 素材（突破・天賦） ----------------------------------------------------
@@ -335,6 +395,27 @@ function materialGroup(label, items) {
       from.className = 'mat-from';
       from.textContent = it.from;
       chip.append(document.createTextNode(' '), from);
+    }
+    // 天賦本は系統ごとに秘境と曜日が違う。旅人は 1 元素で 3 系統を要するので、
+    // 素材ごとに出さないと「いつ回れるのか」が分からなくなる。
+    if (it.domain) {
+      const dom = document.createElement('span');
+      dom.className = 'mat-from';
+      dom.textContent = it.domain;
+      chip.append(document.createTextNode(' '), dom);
+    }
+    if (it.days?.length) {
+      chip.append(document.createTextNode(` ${it.days.map((d) => d.replace('曜', '')).join('・')}`));
+      if (availableToday(it.days, new Date())) {
+        chip.append(document.createTextNode(' '), badge('今日', true));
+      }
+    }
+    // まとめ表示では、その素材が誰に必要なのかを添える。
+    if (it.who?.length) {
+      const who = document.createElement('span');
+      who.className = 'mat-who';
+      who.textContent = `（${it.who.join('・')}）`;
+      chip.append(who);
     }
     list.append(chip);
   }
@@ -398,29 +479,28 @@ async function openMaterials(character) {
     return;
   }
 
-  const { ascension, talent, common } = describe(entry);
+  const { ascension, talents, common } = describe(entry);
   body.append(materialBlock('突破素材', ascension));
 
-  // 天賦本の秘境と曜日。「今日回れるか」は小さなバッジに留める（主軸にしない）。
-  const extras = [];
-  if (talent.domain) extras.push(badge(talent.domain, false));
-  if (talent.days?.length) {
-    extras.push(badge(talent.days.map((d) => d.replace('曜', '')).join('・'), false));
-    if (availableToday(talent.days, new Date())) extras.push(badge('今日', true));
+  // 元素可変キャラは天賦素材が元素ごとに別物なので、元素ごとに節を分ける。
+  for (const t of talents) {
+    body.append(materialBlock(t.element ? `天賦素材（${t.element}）` : '天賦素材', t));
   }
-  body.append(materialBlock('天賦素材', talent, extras));
 
-  // 雑魚ドロップは突破と天賦で同じなので、まとめて一度だけ出す。
+  // 雑魚ドロップが突破と天賦で同じ場合だけ、まとめて一度だけ出す。
   if (common?.length) {
     body.append(materialBlock('共通', { missing: false, sections: [{ label: 'ドロップ元', items: common }] }));
   }
 
-  if (talent.days?.length) {
-    const note = document.createElement('p');
-    note.className = 'dlg-note';
-    note.textContent = '秘境の曜日は端末の日付と 04:00 切り替わりで判定しています。';
-    body.append(note);
+  const note = document.createElement('p');
+  note.className = 'dlg-note';
+  note.textContent = '秘境の曜日は端末の日付と 04:00 切り替わりで判定しています。';
+  if (talents.length > 1) {
+    note.textContent =
+      `天賦素材は元素ごとに別の素材が必要です（${talents.map((t) => t.element).join('・')}）。` +
+      ' ' + note.textContent;
   }
+  body.append(note);
 
   dialog.showModal();
 }
@@ -623,6 +703,10 @@ async function main() {
     renderShelf();
   });
   $('mat-close').addEventListener('click', () => $('mat-dialog').close());
+  // 開いた瞬間に中身を作る。閉じている間はデータも読まない。
+  $('picked-mats').addEventListener('toggle', () => {
+    if ($('picked-mats').open) renderTeam();
+  });
   $('mora-btn').addEventListener('click', openMora);
   $('mora-close').addEventListener('click', () => $('mora-dialog').close());
   $('mora-dialog').addEventListener('click', (e) => {
