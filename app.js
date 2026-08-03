@@ -978,6 +978,24 @@ async function main() {
   const saved = store.load();
   if (saved) showRoster(saved);
   else showImport();
+
+  registerServiceWorker();
+}
+
+/**
+ * ホーム画面から起動できるようにし、電波が無いときも開けるようにする。
+ *
+ * 中身は network-first なので、繋がっている限り常に最新を見る（sw.js 参照）。
+ * 一覧の描画が終わってから登録する。起動時の取得と競合させる意味がないため。
+ *
+ * 安全なオリジン（https と localhost）でないと登録は失敗する。file:// で開いた
+ * 場合もここで例外になるが、通常の Web ページとしては動くので黙って見送る。
+ */
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('./sw.js').catch(() => {
+    /* 登録できなくても本体の動作には影響しない */
+  });
 }
 
 main();
