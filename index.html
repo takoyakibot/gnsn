@@ -8,15 +8,62 @@
 
     <!-- ホーム画面から起動できるようにするための manifest。相対パスにしてあるので
          GitHub Pages のサブディレクトリ公開でもそのまま動く。
-         Service Worker は入れていない（キャッシュが data/characters.json の更新を
-         妨げ、? のままのキャラが直らなくなるため）。 -->
+         キャッシュの方針は sw.js を参照（network-first。data/characters.json の
+         更新が各端末に届かなくなるので cache-first にはできない）。 -->
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icons/icon-192.png" />
     <meta name="theme-color" content="#eaf2f7" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#101d28" media="(prefers-color-scheme: dark)" />
+    <!-- apple- 付きのほうは非推奨になったが、古い iOS はこちらしか見ないので両方置く -->
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="ぐぬすぬ" />
+
+    <!--
+      描画が落ちたときに、それを画面に出すための受け皿。
+
+      このページは showRoster から renderStatus → renderFilters → renderTeam →
+      renderShelf と順に描くので、途中で投げるとそこから先が描かれない。実際に
+      配信し直した直後、古い app.js と新しい index.html が噛み合わず renderTeam が
+      消えた要素を触って落ち、一覧だけが空のまま何の説明も出ない状態になった。
+
+      これを app.js の中に置いても駄目で、まさにその app.js が古いときに拾えない。
+      module の読み込み自体が失敗する場合（消した export を import している等）は
+      app.js の中身が一行も走らないので、なおさら拾えない。だから index.html に
+      直接書き、module より先に仕掛けておく。
+    -->
+    <script>
+      (function () {
+        var shown = false;
+        function report(detail) {
+          if (shown) return; // 最初の 1 件だけ出す（同じ話が積み上がらないように）
+          var box = document.getElementById('fatal-box');
+          if (!box) return;
+          shown = true;
+          box.hidden = false;
+          box.replaceChildren();
+          var p = document.createElement('p');
+          p.style.margin = '0';
+          p.textContent = '画面の描画に失敗しました。';
+          var q = document.createElement('p');
+          q.className = 'note';
+          q.textContent =
+            '配信し直した直後は、古いファイルと新しいファイルが混ざって出ることが' +
+            'あります。スーパーリロード（Windows: Ctrl+Shift+R / Mac: ⌘+Shift+R）で' +
+            '直る場合があります。';
+          var code = document.createElement('code');
+          code.textContent = detail;
+          box.append(p, q, code);
+        }
+        window.addEventListener('error', function (e) {
+          report(e.message);
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          report((e.reason && e.reason.message) || String(e.reason));
+        });
+      })();
+    </script>
 
     <style>
       /* 配色はゲームのオープニングの空（澄んだ空色）と、そこに差す金色から取っている。
@@ -464,6 +511,12 @@
           HoYoLAB の「全キャラクター」画面をコピーして貼り付けると、所持キャラだけが並びます。
         </p>
       </header>
+
+      <!-- 描画が途中で落ちたときの受け皿。ここが無いと、例外が出た時点から先が
+           描かれないまま「一覧に何も出ない」という結果だけが残り、原因が画面から
+           一切読めない。実際に配信し直した直後の index.html と app.js の食い違いで
+           それが起きたので、黙って落ちないようにしてある。 -->
+      <div class="warn" id="fatal-box" role="alert" hidden></div>
 
       <section class="panel" id="import-panel">
         <h2>取り込み</h2>

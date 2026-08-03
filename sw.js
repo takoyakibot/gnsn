@@ -56,17 +56,33 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// index.html と *.js は互いに噛み合っていないと動かない。GitHub Pages は
+// Cache-Control: max-age=600 を返すので、この 2 種類の寿命は別々に切れる。
+// 配信し直した直後に「古い app.js + 新しい index.html」の組み合わせが起きて、
+// 消えた要素を触った時点で描画が止まり、一覧が空のまま何も出ない状態になった
+// （実際に起きた。renderTeam が $('resonance') で落ちていた）。
+//
+// この 2 種類だけは毎回サーバに確認を取り、世代を揃える。変わっていなければ
+// 304 が返るだけなので安い。データと画像は普通のキャッシュに任せる。
+const MUST_AGREE = /(?:\.html|\.js|\/)$/;
+
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   // 書き込みと他オリジンには触らない。このツールは外部に何も投げないので、
   // ここを通るのは自分のファイルの GET だけのはず。
   if (request.method !== 'GET') return;
-  if (new URL(request.url).origin !== self.location.origin) return;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
 
   event.respondWith(
     (async () => {
       try {
-        const res = await fetch(request);
+        // navigate の Request はそのままでは作り直せないので、URL から組む。
+        const res = await fetch(
+          MUST_AGREE.test(url.pathname)
+            ? new Request(url.href, { cache: 'no-cache', credentials: 'same-origin' })
+            : request,
+        );
         if (res.ok) {
           // 取れたぶんは控えを更新しておく（次に繋がらないときのため）
           const copy = res.clone();
