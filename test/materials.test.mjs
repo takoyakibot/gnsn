@@ -58,7 +58,7 @@ test('素材データのキーはすべて characters.json に存在する', () 
 });
 
 test('素材が持つのは名前・入手元・秘境・曜日だけ（数量は持たない）', () => {
-  const allowed = new Set(['name', 'from', 'domain', 'days', 'region', 'entrance']);
+  const allowed = new Set(['name', 'from', 'domain', 'days', 'region', 'entrance', 'motif', 'motifDraft']);
   const bad = [];
   eachGroup(({ name, section, key, items }) => {
     for (const item of items) {
@@ -192,6 +192,38 @@ test('秘境名から「熟知秘境：」が落ちている', () => {
     for (const i of items) if (/^熟知秘境/.test(i.domain)) bad.push(`${name}: ${i.domain}`);
   });
   assert.deepEqual(bad, []);
+});
+
+test('図柄は書いてあるものだけ付き、未確認には印が立つ', () => {
+  // うろ覚えの図柄を確定情報として出さないため、未確認は motifDraft で区別する。
+  const bad = [];
+  eachGroup(({ name, key, items }) => {
+    if (key !== 'book') return;
+    for (const i of items) {
+      if (i.motif !== undefined && !String(i.motif).trim()) bad.push(`${name}: ${i.name} の図柄が空文字`);
+      if (i.motifDraft !== undefined && i.motif === undefined) {
+        bad.push(`${name}: ${i.name} に図柄なしで印だけ付いている`);
+      }
+      if (String(i.motif ?? '').startsWith('?')) bad.push(`${name}: ${i.name} の ? が剥がれていない`);
+    }
+  });
+  assert.deepEqual(bad, []);
+});
+
+test('確認済みの図柄は印なし、迷いのあるものは印つきで入る', () => {
+  const books = new Map();
+  eachGroup(({ key, items }) => {
+    if (key !== 'book') return;
+    for (const i of items) if (!books.has(i.name)) books.set(i.name, i);
+  });
+  // 実物を見て断定できたものは確定表示
+  assert.equal(books.get('「忠言」').motif, '鈴蘭');
+  assert.equal(books.get('「忠言」').motifDraft, undefined);
+  // 見え方に迷いがあるものは未確認のまま
+  assert.equal(books.get('「創意」').motifDraft, true);
+  // まだ見ていないものは何も持たない（推測で埋めない）
+  assert.equal(books.get('「自由」').motif, undefined);
+  assert.equal(books.get('「正義」').motif, undefined);
 });
 
 test('冠は天賦本と混ざらない', () => {

@@ -195,6 +195,14 @@ function collect(costs, section, characterName, problems) {
         extra.region = place.region;
         extra.entrance = place.entrance;
         extra.days = material.daysOfWeek ?? null;
+        // 図柄はまだ書かれていないものが多い。空なら持たせない。
+        // draft は「未確認」で、画面では ? を添えて薄く出す。
+        const motif = BOOK_MOTIFS.get(collapsed);
+        if (motif) {
+          extra.motif = motif.text;
+          if (motif.draft) extra.motifDraft = true;
+        }
+        seenBooks.add(collapsed);
       }
 
       groups[kind] ??= new Map();
@@ -236,6 +244,32 @@ function collect(costs, section, characterName, problems) {
  * genshin-db の秘境名は難易度の末尾（`熟知秘境：深炎の底 I`）が付くので落として突き合わせる。
  * 公式のアイコン画像は二次創作ガイドラインで使えないため、図柄の代わりが地域と入口になる。
  */
+/**
+ * 天賦本の図柄（日本語）。tools/book-motifs.json を地域ごとの入れ子から平らにする。
+ *
+ * 公式のアイコン画像は二次創作ガイドラインで使えないので、言葉で置き換える。
+ * 空文字は「まだ書いていない」で、画面には出さない。うろ覚えの図柄を出すくらいなら
+ * 何も出さないほうがよい（間違った図柄は名前だけのときより質が悪い）。
+ */
+function bookMotifs() {
+  const raw = JSON.parse(readFileSync(join(ROOT, 'tools/book-motifs.json'), 'utf8'));
+  const flat = new Map();
+  for (const [region, group] of Object.entries(raw)) {
+    if (region.startsWith('_')) continue;
+    for (const [book, value] of Object.entries(group)) {
+      const text = String(value).trim();
+      if (!text) {
+        flat.set(book, null); // 未記入。キーの検査には使うが画面には出さない
+        continue;
+      }
+      // 先頭の ? は「未確認」。実物を見て確かめたら消す運用。
+      const draft = text.startsWith('?');
+      flat.set(book, { text: draft ? text.slice(1).trim() : text, draft });
+    }
+  }
+  return flat;
+}
+
 function talentDomains() {
   const map = new Map();
   for (const name of gdb.domains('names', { ...JP, matchCategories: true })) {
@@ -344,6 +378,8 @@ const problems = [];
 const talentAliases = JSON.parse(readFileSync(join(ROOT, 'tools/talent-aliases.json'), 'utf8'));
 const VARIANTS_BY_BASE = elementVariants();
 const TALENT_DOMAINS = talentDomains();
+const BOOK_MOTIFS = bookMotifs();
+const seenBooks = new Set(); // 実在する天賦本の系統（図柄テーブルの検査に使う）
 
 for (const [character, base] of Object.entries(talentAliases)) {
   if (!VARIANTS_BY_BASE.has(base)) {
@@ -455,6 +491,18 @@ const byName = (source) =>
 
 const sorted = byName(characters);
 const sortedMaterials = byName(materials);
+
+// 図柄テーブルのキーが実在する天賦本と一致しているか検査する。
+// 名前を書き間違えても黙って無視されると、図柄が出ない理由が分からなくなる。
+const motifKeys = new Set(BOOK_MOTIFS.keys());
+const strayMotifs = [...motifKeys].filter((k) => !seenBooks.has(k));
+const missingMotifs = [...seenBooks].filter((k) => !motifKeys.has(k));
+if (strayMotifs.length || missingMotifs.length) {
+  fail('tools/book-motifs.json のキーが天賦本と噛み合っていない', [
+    ...strayMotifs.map((k) => `${k}: そんな天賦本は無い`),
+    ...missingMotifs.map((k) => `${k}: 図柄テーブルに項目が無い`),
+  ]);
+}
 
 const costs = costTable(names, talentAliases, problems);
 if (problems.length) {

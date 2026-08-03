@@ -496,6 +496,15 @@ function materialGroup(label, items, kind) {
     const b = document.createElement('b');
     b.textContent = it.name;
     chip.append(b);
+    // 天賦本は名前も秘境名も覚えていないことがあるので、アイコンの図柄を言葉で添える。
+    // 未確認（motifDraft）のものは ? を付けて薄く出し、確定した情報と区別する。
+    if (it.motif) {
+      const motif = document.createElement('span');
+      motif.className = it.motifDraft ? 'mat-motif draft' : 'mat-motif';
+      motif.textContent = it.motifDraft ? `${it.motif}?` : it.motif;
+      if (it.motifDraft) motif.title = 'まだ実物で確かめていない図柄です';
+      chip.append(document.createTextNode(' '), motif);
+    }
     // 天賦本は「どこの秘境か」が分からないと辿れない。地域と入口を添える。
     if (it.region) {
       const place = document.createElement('span');

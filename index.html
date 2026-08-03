@@ -312,6 +312,12 @@
       .mat-item b { font-weight: 600; }
       .mat-from { color: var(--muted); font-size: .95em; }
       .mat-from::before { content: '← '; }
+      /* 天賦本の図柄。未確認のものは薄く出して確定情報と区別する。 */
+      .mat-motif {
+        font-size: .95em; padding: 0 5px; border-radius: 4px;
+        background: color-mix(in srgb, var(--k, var(--muted)) 18%, transparent);
+      }
+      .mat-motif.draft { opacity: .6; font-style: italic; }
 
       /* 素材の種別で色を付ける。名前を覚えていなくても種類で見分けられるように。 */
       .mat-item[data-kind] {
