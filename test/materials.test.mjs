@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 
 import { parse } from '../parse.js';
 import { matchKey } from '../names.js';
-import { aggregate, availableToday, describe, domainWeekday, moraRows } from '../materials.js';
+import { aggregate, availableToday, costRows, describe, domainWeekday } from '../materials.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
@@ -16,7 +16,7 @@ const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 const CHARACTERS = JSON.parse(read('data/characters.json'));
 const FILE = JSON.parse(read('data/materials.json'));
 const MATERIALS = FILE.characters;
-const MORA = FILE.mora;
+const COSTS = FILE.costs;
 const PC = read('test/fixtures/roster-pc.txt');
 
 const GROUP_KEYS = ['gem', 'boss', 'local', 'common', 'book', 'weeklyBoss', 'crown'];
@@ -58,7 +58,7 @@ test('素材データのキーはすべて characters.json に存在する', () 
 });
 
 test('素材が持つのは名前・入手元・秘境・曜日だけ（数量は持たない）', () => {
-  const allowed = new Set(['name', 'from', 'domain', 'days']);
+  const allowed = new Set(['name', 'from', 'domain', 'days', 'region', 'entrance']);
   const bad = [];
   eachGroup(({ name, section, key, items }) => {
     for (const item of items) {
@@ -140,12 +140,12 @@ test('入手元に「がドロップ」「挑戦報酬」「（Lv.XX以上）」
 test('香菱の素材が期待どおり', () => {
   const m = MATERIALS['香菱'];
   assert.deepEqual(m.ascension.gem, [{ name: '炎願のアゲート' }]);
-  assert.deepEqual(m.ascension.local, [{ name: '絶雲の唐辛子' }]);
+  assert.deepEqual(m.ascension.local, [{ name: '絶雲の唐辛子', from: '璃月' }]);
   assert.deepEqual(m.ascension.boss, [{ name: '常燃の火種', from: '爆炎樹' }]);
   assert.deepEqual(m.ascension.common, [{ name: 'スライム' }]);
   assert.deepEqual(m.talent.book.map((b) => b.name), ['「勤労」']);
   assert.deepEqual(m.talent.weeklyBoss, [{ name: '東風の爪', from: '風魔龍' }]);
-  assert.deepEqual(m.talent.crown, [{ name: '知恵の冠' }]);
+  assert.deepEqual(m.talent.crown, [{ name: '知恵の冠', from: '期間限定イベント報酬' }]);
 });
 
 test('突破のボス素材と天賦の週ボス素材が別々に分類される', () => {
@@ -162,21 +162,40 @@ test('天賦本には秘境名と曜日が素材ごとに付く', () => {
   // 系統ごとに曜日が違い、旅人は 1 元素で 3 系統を必要とする。グループ単位で持つと
   // どの系統がいつ回れるのかが表せない。
   assert.deepEqual(MATERIALS['香菱'].talent.book, [
-    { name: '「勤労」', domain: '熟知秘境：深炎の底', days: ['火曜', '金曜', '日曜'] },
+    {
+      name: '「勤労」',
+      domain: '深炎の底',
+      region: '璃月',
+      entrance: '太山府',
+      days: ['火曜', '金曜', '日曜'],
+    },
   ]);
 });
 
-test('すべての天賦本が秘境名と曜日を持つ', () => {
+test('すべての天賦本が秘境名・地域・入口・曜日を持つ', () => {
+  // 素材名も秘境名も覚えていない人が「モンドの忘却の峡谷」で辿れるようにするため、
+  // 地域と入口が欠けていないことを検査する。
   const bad = [];
   eachGroup(({ name, key, items }) => {
     if (key !== 'book') return;
-    for (const i of items) if (!i.domain || !i.days?.length) bad.push(`${name}: ${i.name}`);
+    for (const i of items) {
+      if (!i.domain || !i.region || !i.entrance || !i.days?.length) bad.push(`${name}: ${i.name}`);
+    }
+  });
+  assert.deepEqual(bad, []);
+});
+
+test('秘境名から「熟知秘境：」が落ちている', () => {
+  const bad = [];
+  eachGroup(({ name, key, items }) => {
+    if (key !== 'book') return;
+    for (const i of items) if (/^熟知秘境/.test(i.domain)) bad.push(`${name}: ${i.domain}`);
   });
   assert.deepEqual(bad, []);
 });
 
 test('冠は天賦本と混ざらない', () => {
-  assert.deepEqual(MATERIALS['香菱'].talent.crown, [{ name: '知恵の冠' }]);
+  assert.equal(MATERIALS['香菱'].talent.crown[0].name, '知恵の冠');
   assert.equal(MATERIALS['香菱'].talent.book.some((i) => i.name === '知恵の冠'), false);
 });
 
@@ -212,7 +231,7 @@ test('旅人の元素別天賦はそれぞれ週ボス素材と冠を持つ', ()
   for (const [element, group] of Object.entries(MATERIALS['旅人'].talentByElement)) {
     assert.equal(group.weeklyBoss?.length, 1, `${element}: 週ボス素材がない`);
     assert.ok(group.weeklyBoss[0].from, `${element}: 週ボス素材に入手元がない`);
-    assert.deepEqual(group.crown, [{ name: '知恵の冠' }], `${element}: 冠がない`);
+    assert.equal(group.crown?.[0]?.name, '知恵の冠', `${element}: 冠がない`);
   }
 });
 
@@ -242,7 +261,7 @@ test('describe() はデータの無い節を missing として返す', () => {
 test('describe() は空エントリでも落ちない', () => {
   const d = describe(undefined);
   assert.equal(d.ascension.missing, true);
-  assert.deepEqual(d.talents, [{ element: null, missing: true, sections: [] }]);
+  assert.deepEqual(d.talents, [{ element: null, missing: true, done: false, sections: [] }]);
   assert.equal(d.common, null);
 });
 
@@ -332,7 +351,7 @@ test('aggregate() は入手元を保つ', () => {
 test('aggregate() は天賦本の秘境と曜日を素材ごとに保つ', () => {
   const { sections } = aggregate(pick('香菱'));
   const book = sections.find((s) => s.key === 'book');
-  assert.equal(book.items[0].domain, '熟知秘境：深炎の底');
+  assert.equal(book.items[0].domain, '深炎の底');
   assert.deepEqual(book.items[0].days, ['火曜', '金曜', '日曜']);
 });
 
@@ -359,6 +378,7 @@ test('aggregate() は空でも落ちない', () => {
     noData: [],
     partial: [],
     elementVariant: [],
+    done: [],
   });
 });
 
@@ -371,23 +391,75 @@ test('aggregate() は同じキャラを二重に数えない', () => {
 
 // --- モラ早見表 -----------------------------------------------------------
 
-test('モラ早見表は突破 6 段階・天賦 9 段階', () => {
-  assert.deepEqual(MORA.ascension, [20000, 40000, 60000, 80000, 100000, 120000]);
-  assert.deepEqual(MORA.talent, [12500, 17500, 25000, 30000, 37500, 120000, 260000, 450000, 700000]);
+test('早見表は突破 6 段階・天賦 9 段階', () => {
+  assert.equal(COSTS.ascension.rows.length, 6);
+  assert.equal(COSTS.talent.rows.length, 9);
 });
 
-test('moraRows() が段階ラベルと累計を返す', () => {
-  const { ascension, talent } = moraRows(MORA);
-  assert.equal(ascension.length, 6);
-  assert.deepEqual(ascension[0], { label: '1段階', amount: 20000, total: 20000 });
-  assert.deepEqual(ascension.at(-1), { label: '6段階', amount: 120000, total: 420000 });
-  assert.equal(talent[0].label, 'Lv.2');
-  assert.equal(talent.at(-1).label, 'Lv.10');
-  assert.equal(talent.at(-1).total, 1652500);
+test('早見表のモラが従来どおり', () => {
+  assert.deepEqual(
+    COSTS.ascension.rows.map((r) => r.mora),
+    [20000, 40000, 60000, 80000, 100000, 120000],
+  );
+  assert.deepEqual(
+    COSTS.talent.rows.map((r) => r.mora),
+    [12500, 17500, 25000, 30000, 37500, 120000, 260000, 450000, 700000],
+  );
 });
 
-test('moraRows() は空でも落ちない', () => {
-  assert.deepEqual(moraRows(undefined), { ascension: [], talent: [] });
+test('早見表は素材の種別とレアリティと個数を持つ', () => {
+  // 1 段階目は 宝石★2×1 / 特産品×3 / 共通素材★1×3
+  assert.deepEqual(COSTS.ascension.rows[0].items, [
+    { kind: 'common', rarity: 1, count: 3 },
+    { kind: 'gem', rarity: 2, count: 1 },
+    { kind: 'local', rarity: null, count: 3 },
+  ]);
+  // Lv.10 は 天賦本★4×16 / 共通素材★3×12 / 冠★5×1 / 週ボス★5×2
+  assert.deepEqual(COSTS.talent.rows.at(-1).items, [
+    { kind: 'book', rarity: 4, count: 16 },
+    { kind: 'common', rarity: 3, count: 12 },
+    { kind: 'crown', rarity: 5, count: 1 },
+    { kind: 'weeklyBoss', rarity: 5, count: 2 },
+  ]);
+});
+
+test('早見表の例外は旅人だけ（突破にボス素材が無い）', () => {
+  assert.deepEqual(COSTS.ascension.exceptions, ['空', '蛍']);
+});
+
+test('costRows() が段階ラベルと累計を返す', () => {
+  const { ascension, talent } = costRows(COSTS);
+  assert.equal(ascension.rows.length, 6);
+  assert.equal(ascension.rows[0].label, '1段階');
+  assert.equal(ascension.rows.at(-1).label, '6段階');
+  assert.equal(ascension.rows.at(-1).moraTotal, 420000);
+  assert.equal(talent.rows[0].label, 'Lv.2');
+  assert.equal(talent.rows.at(-1).label, 'Lv.10');
+  assert.equal(talent.rows.at(-1).moraTotal, 1652500);
+});
+
+test('costRows() は種別ごとに累計する', () => {
+  const { ascension } = costRows(COSTS);
+  const gem = (i) => ascension.rows[i].cells.find((c) => c.kind === 'gem');
+  // 宝石は 1 / 3 / 6 / 3 / 6 / 6 で累計 25
+  assert.deepEqual(ascension.rows.map((_, i) => gem(i).count), [1, 3, 6, 3, 6, 6]);
+  assert.equal(gem(5).total, 25);
+  // 段階が上がるとレアリティも上がる
+  assert.deepEqual(ascension.rows.map((_, i) => gem(i).rarity), [2, 3, 3, 4, 4, 5]);
+});
+
+test('costRows() は無い種別を 0 として返す', () => {
+  const { talent } = costRows(COSTS);
+  const crown = talent.rows[0].cells.find((c) => c.kind === 'crown');
+  assert.equal(crown.count, 0);
+  assert.equal(crown.rarity, null);
+});
+
+test('costRows() は空でも落ちない', () => {
+  assert.deepEqual(costRows(undefined), {
+    ascension: { rows: [], exceptions: [] },
+    talent: { rows: [], exceptions: [] },
+  });
 });
 
 // --- 秘境の曜日 -----------------------------------------------------------

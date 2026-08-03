@@ -27,6 +27,24 @@ export function bandOf(level) {
   return LEVEL_BANDS.find((b) => level >= b.min && level <= b.max) ?? null;
 }
 
+/**
+ * 最後の突破は Lv.80 -> 81 で起きる。Lv.81 以上なら突破素材はもう要らない。
+ */
+export const LAST_ASCENSION_LEVEL = 81;
+
+/**
+ * 突破素材がもう要らないか。
+ * レベルが 81 以上か、利用者が「レベル育成済み」に印を付けていれば要らない。
+ */
+export function ascensionDone(character, progress) {
+  return character.level >= LAST_ASCENSION_LEVEL || Boolean(progress?.level);
+}
+
+/** 天賦素材がもう要らないか。判断材料はレベルには無いので印だけで決める。 */
+export function talentDone(character, progress) {
+  return Boolean(progress?.talent);
+}
+
 /** characters.json から照合キー索引を作る。 */
 export function buildIndex(data) {
   const index = new Map();

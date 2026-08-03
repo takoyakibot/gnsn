@@ -9,7 +9,18 @@ import { dirname, join } from 'node:path';
 
 import { parse } from '../parse.js';
 import { matchKey, norm } from '../names.js';
-import { buildIndex, attach, unknownNames, resonance, stats, bandOf, LEVEL_BANDS } from '../roster.js';
+import {
+  ascensionDone,
+  attach,
+  bandOf,
+  buildIndex,
+  LAST_ASCENSION_LEVEL,
+  LEVEL_BANDS,
+  resonance,
+  stats,
+  talentDone,
+  unknownNames,
+} from '../roster.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
@@ -227,6 +238,36 @@ test('帯を除外すると該当キャラだけが消える', () => {
   assert.equal(shown.length + removed.length, characters.length);
   assert.equal(removed.every((c) => c.level <= 10), true);
   assert.equal(shown.every((c) => c.level > 10), true);
+});
+
+// --- 育成の済み判定 -------------------------------------------------------
+
+test('最後の突破は Lv.81 で起きる', () => {
+  assert.equal(LAST_ASCENSION_LEVEL, 81);
+});
+
+test('Lv.81 以上なら印が無くても突破は済み扱い', () => {
+  assert.equal(ascensionDone({ level: 81 }, undefined), true);
+  assert.equal(ascensionDone({ level: 90 }, undefined), true);
+  assert.equal(ascensionDone({ level: 80 }, undefined), false);
+});
+
+test('Lv.80 以下でも印を付ければ突破は済み扱い', () => {
+  assert.equal(ascensionDone({ level: 80 }, { level: true }), true);
+  assert.equal(ascensionDone({ level: 1 }, { level: true }), true);
+  assert.equal(ascensionDone({ level: 80 }, { level: false }), false);
+});
+
+test('天賦はレベルでは判定せず印だけで決まる', () => {
+  assert.equal(talentDone({ level: 90 }, undefined), false, 'Lv.90 で天賦済みにされている');
+  assert.equal(talentDone({ level: 90 }, { talent: true }), true);
+  assert.equal(talentDone({ level: 1 }, { talent: true }), true);
+});
+
+test('検証用ロスターで突破済みになるのは Lv.81 以上の 8 人', () => {
+  const done = parse(PC).characters.filter((c) => ascensionDone(c, undefined));
+  assert.equal(done.length, 8);
+  assert.equal(done.every((c) => c.level >= 81), true);
 });
 
 test('統計値が数え上げられる', () => {

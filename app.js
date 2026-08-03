@@ -2,23 +2,28 @@
 
 import { parse } from './parse.js';
 import {
+  ascensionDone,
   attach,
   bandOf,
   buildIndex,
+  LAST_ASCENSION_LEVEL,
   LEVEL_BANDS,
   resonance,
   stats,
+  talentDone,
   unknownNames,
   UNKNOWN,
   VARIABLE,
 } from './roster.js';
-import { aggregate, availableToday, describe, moraRows } from './materials.js';
+import { aggregate, availableToday, COST_COLUMNS, costRows, describe } from './materials.js';
 import { matchKey } from './names.js';
 
 const STORAGE_KEY = 'gnsn.roster.v1';
 // 編成メモ / 育成予定の選択は所持キャラとは別に保存する。ロスターを貼り直しても
 // 選択が残るようにしたいので、パース結果とは混ぜない。
 const SELECTION_KEY = 'gnsn.selection.v1';
+// 育成の済み印。キャラ名 -> { level, talent }
+const PROGRESS_KEY = 'gnsn.progress.v1';
 const ELEMENTS = ['炎', '水', '風', '雷', '草', '氷', '岩', VARIABLE, UNKNOWN];
 const WEAPONS = ['片手剣', '両手剣', '長柄武器', '弓', '法器', UNKNOWN];
 const TEAM_SIZE = 4;
@@ -82,6 +87,45 @@ const selectionStore = {
   },
 };
 
+/**
+ * 育成の済み印。キャラ名 -> { level, talent }。
+ * 進捗を細かく追う道具にはしないので、持つのは「終わったかどうか」だけ。
+ * 何をいつやれとは言わず、済んだ分の素材を視界から外すためだけに使う。
+ */
+const progressStore = {
+  load() {
+    try {
+      const v = JSON.parse(localStorage.getItem(PROGRESS_KEY) ?? 'null');
+      if (!v || typeof v !== 'object') return {};
+      const out = {};
+      for (const [name, flags] of Object.entries(v)) {
+        out[name] = { level: Boolean(flags?.level), talent: Boolean(flags?.talent) };
+      }
+      return out;
+    } catch {
+      return {};
+    }
+  },
+  save(progress) {
+    try {
+      // 何も印が付いていないキャラは保存しない（消したぶんが残り続けないように）
+      const trimmed = Object.fromEntries(
+        Object.entries(progress).filter(([, f]) => f.level || f.talent),
+      );
+      localStorage.setItem(PROGRESS_KEY, JSON.stringify(trimmed));
+    } catch {
+      /* 保存できなくても表示は続ける */
+    }
+  },
+  clear() {
+    try {
+      localStorage.removeItem(PROGRESS_KEY);
+    } catch {
+      /* noop */
+    }
+  },
+};
+
 const state = {
   index: new Map(),
   saved: null, // { characters, format, savedAt }
@@ -95,7 +139,8 @@ const state = {
   // 素材データは初回に素材を開いたときだけ取りに行く。棚の描画には要らないので
   // 起動時に読むと 100KB 超を無駄に運ぶことになる。
   materials: null,
-  mora: null,
+  costs: null,
+  progress: {},
   materialsError: null,
 };
 
@@ -236,6 +281,60 @@ function toggleTeam(name) {
   renderShelf();
 }
 
+/**
+ * 育成の済み印。付けるとそのキャラの素材が一覧から消える。
+ * レベルは Lv.81 以上なら最後の突破が済んでいるので、印に関係なく済み扱いにする。
+ */
+function progressChecks(c) {
+  const box = document.createElement('div');
+  box.className = 'progress';
+  const flags = state.progress[c.name] ?? { level: false, talent: false };
+  const autoLevel = c.level >= LAST_ASCENSION_LEVEL;
+
+  const add = (key, label, checked, disabled, title) => {
+    const wrap = document.createElement('label');
+    wrap.className = disabled ? 'done-check auto' : 'done-check';
+    wrap.title = title;
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = checked;
+    input.disabled = disabled;
+    input.addEventListener('change', () => {
+      const next = { ...(state.progress[c.name] ?? { level: false, talent: false }) };
+      next[key] = input.checked;
+      state.progress[c.name] = next;
+      progressStore.save(state.progress);
+      renderTeam();
+    });
+    wrap.append(input, document.createTextNode(label));
+    box.append(wrap);
+  };
+
+  add(
+    'level',
+    'Lv済',
+    autoLevel || flags.level,
+    autoLevel,
+    autoLevel
+      ? `Lv.${LAST_ASCENSION_LEVEL} 以上なので突破は済んでいます`
+      : 'レベル育成が終わっていれば印を付けてください（突破素材が一覧から消えます）',
+  );
+  add(
+    'talent',
+    '天賦済',
+    flags.talent,
+    false,
+    '天賦育成が終わっていれば印を付けてください（天賦素材が一覧から消えます）',
+  );
+  return box;
+}
+
+/** そのキャラの素材をもう出さなくてよいか。 */
+const doneFlags = (c) => ({
+  ascension: ascensionDone(c, state.progress[c.name]),
+  talent: talentDone(c, state.progress[c.name]),
+});
+
 function renderTeam() {
   const host = $('team');
   host.replaceChildren();
@@ -263,7 +362,7 @@ function renderTeam() {
       matBtn.setAttribute('aria-label', `${c.name} の突破素材・天賦素材`);
       matBtn.addEventListener('click', () => openMaterials(c));
 
-      slot.append(name, meta, matBtn);
+      slot.append(name, meta, matBtn, progressChecks(c));
     } else {
       slot.textContent = '空き枠';
     }
@@ -330,14 +429,19 @@ async function renderPickedMaterials(members) {
     return;
   }
 
-  const picks = members.map((c) => ({ name: c.name, entry: state.materials?.get(matchKey(c.name)) }));
-  const { sections, noData, partial, elementVariant } = aggregate(picks);
+  const picks = members.map((c) => ({
+    name: c.name,
+    entry: state.materials?.get(matchKey(c.name)),
+    ...doneFlags(c),
+  }));
+  const { sections, noData, partial, elementVariant, done } = aggregate(picks);
 
   for (const s of sections) {
     body.append(
       materialGroup(
         s.label,
         s.items.map((i) => ({ ...i, who: i.characters })),
+        s.key,
       ),
     );
   }
@@ -349,6 +453,7 @@ async function renderPickedMaterials(members) {
     ...elementVariant.map(
       (name) => `${name}: 天賦素材は元素ごとに別物なので、まとめには入れていません（素材ボタンで見られます）`,
     ),
+    ...done.map((d) => `${d.name}: ${d.skipped.join("・")}は育成済みなので省いています`),
   ];
   for (const text of gaps) {
     const n = document.createElement('p');
@@ -367,7 +472,7 @@ async function loadMaterials() {
     if (!res.ok) throw new Error(String(res.status));
     const data = await res.json();
     // 照合キーで引けるようにしておく。キャラ名の揺れの扱いを棚と揃える。
-    state.mora = data.mora;
+    state.costs = data.costs;
     state.materials = new Map(
       Object.entries(data.characters).map(([name, v]) => [matchKey(name), v]),
     );
@@ -376,7 +481,7 @@ async function loadMaterials() {
   }
 }
 
-function materialGroup(label, items) {
+function materialGroup(label, items, kind) {
   const row = document.createElement('div');
   row.className = 'mat-group';
   const name = document.createElement('span');
@@ -386,9 +491,19 @@ function materialGroup(label, items) {
   for (const it of items) {
     const chip = document.createElement('span');
     chip.className = 'mat-item';
+    // 種別ごとに色を付ける。素材名を覚えていなくても種類で見分けられるように。
+    if (kind) chip.dataset.kind = kind;
     const b = document.createElement('b');
     b.textContent = it.name;
     chip.append(b);
+    // 天賦本は「どこの秘境か」が分からないと辿れない。地域と入口を添える。
+    if (it.region) {
+      const place = document.createElement('span');
+      place.className = 'mat-from';
+      place.textContent = `${it.region}・${it.domain ?? ''}`.replace(/・$/, '');
+      place.title = it.entrance ? `入口: ${it.entrance}` : '';
+      chip.append(document.createTextNode(' '), place);
+    }
     // ボス素材は素材名だけでは何を殴ればいいのか分からないので入手元を添える。
     if (it.from) {
       const from = document.createElement('span');
@@ -398,12 +513,6 @@ function materialGroup(label, items) {
     }
     // 天賦本は系統ごとに秘境と曜日が違う。旅人は 1 元素で 3 系統を要するので、
     // 素材ごとに出さないと「いつ回れるのか」が分からなくなる。
-    if (it.domain) {
-      const dom = document.createElement('span');
-      dom.className = 'mat-from';
-      dom.textContent = it.domain;
-      chip.append(document.createTextNode(' '), dom);
-    }
     if (it.days?.length) {
       chip.append(document.createTextNode(` ${it.days.map((d) => d.replace('曜', '')).join('・')}`));
       if (availableToday(it.days, new Date())) {
@@ -430,6 +539,13 @@ function materialBlock(heading, group, extras = []) {
   for (const el of extras) h.append(document.createTextNode(' '), el);
   frag.append(h);
 
+  if (group.done) {
+    const p = document.createElement('p');
+    p.className = 'dlg-missing';
+    p.textContent = '育成済みなので表示していません。';
+    frag.append(p);
+    return frag;
+  }
   if (group.missing) {
     const p = document.createElement('p');
     p.className = 'dlg-missing';
@@ -438,7 +554,7 @@ function materialBlock(heading, group, extras = []) {
     frag.append(p);
     return frag;
   }
-  for (const s of group.sections) frag.append(materialGroup(s.label, s.items));
+  for (const s of group.sections) frag.append(materialGroup(s.label, s.items, s.key));
   return frag;
 }
 
@@ -479,7 +595,8 @@ async function openMaterials(character) {
     return;
   }
 
-  const { ascension, talents, common } = describe(entry);
+  const done = doneFlags(character);
+  const { ascension, talents, common } = describe(entry, done);
   body.append(materialBlock('突破素材', ascension));
 
   // 元素可変キャラは天賦素材が元素ごとに別物なので、元素ごとに節を分ける。
@@ -505,64 +622,127 @@ async function openMaterials(character) {
   dialog.showModal();
 }
 
-// --- モラ早見表 ------------------------------------------------------------
+// --- 育成早見表 --------------------------------------------------------------
 //
-// モラの必要額は全キャラ共通なので、キャラごとには持たせず一枚の表にしている。
+// 段階ごとの必要数は、素材の名前こそキャラで違うが「どのレアリティを何個」という
+// 構造は全キャラ共通。名前を覚えていなくても「Lv.7 なら紫の天賦本が 4 つ」と
+// 分かるように、種別とレアリティだけの表にしている。
 
-function moraTable(caption, rows) {
+function costTableEl(caption, section, data) {
   const frag = document.createDocumentFragment();
-  const h = document.createElement('h4');
+  const h = document.createElement("h4");
   h.textContent = caption;
   frag.append(h);
 
-  const table = document.createElement('table');
-  table.className = 'mora-table';
-  const head = document.createElement('tr');
-  for (const label of ['段階', '必要', '累計']) {
-    const th = document.createElement('th');
+  if (!data.rows.length) {
+    const p = document.createElement("p");
+    p.className = "dlg-missing";
+    p.textContent = "データがありません。";
+    frag.append(p);
+    return frag;
+  }
+
+  const columns = COST_COLUMNS[section];
+  const table = document.createElement("table");
+  table.className = "cost-table";
+
+  const head = document.createElement("tr");
+  for (const label of ["段階", ...columns.map(([, l]) => l), "モラ"]) {
+    const th = document.createElement("th");
     th.textContent = label;
     head.append(th);
   }
   table.append(head);
 
-  for (const r of rows) {
-    const tr = document.createElement('tr');
-    for (const value of [r.label, r.amount.toLocaleString('ja-JP'), r.total.toLocaleString('ja-JP')]) {
-      const td = document.createElement('td');
-      td.textContent = value;
+  for (const row of data.rows) {
+    const tr = document.createElement("tr");
+    const stage = document.createElement("td");
+    stage.textContent = row.label;
+    tr.append(stage);
+
+    for (const cell of row.cells) {
+      const td = document.createElement("td");
+      if (cell.count === 0) {
+        td.className = "empty";
+        td.textContent = "–";
+      } else {
+        // レアリティはゲーム内のアイテム背景と同じ色にする。名前より色のほうが
+        // 「紫がいくつ」と数えやすい。
+        const pill = document.createElement("span");
+        pill.className = "rarity";
+        if (cell.rarity) pill.dataset.rarity = String(cell.rarity);
+        pill.textContent = String(cell.count);
+        td.append(pill);
+        const total = document.createElement("span");
+        total.className = "cum";
+        total.textContent = String(cell.total);
+        td.append(total);
+      }
       tr.append(td);
     }
+
+    const mora = document.createElement("td");
+    mora.className = "mora";
+    mora.textContent = row.mora.toLocaleString("ja-JP");
+    const cum = document.createElement("span");
+    cum.className = "cum";
+    cum.textContent = row.moraTotal.toLocaleString("ja-JP");
+    mora.append(cum);
+    tr.append(mora);
     table.append(tr);
   }
-  frag.append(table);
+
+  const wrap = document.createElement("div");
+  wrap.className = "table-scroll";
+  wrap.append(table);
+  frag.append(wrap);
+
+  if (data.exceptions.length) {
+    const p = document.createElement("p");
+    p.className = "dlg-note";
+    p.textContent = `${data.exceptions.join(" / ")} だけは必要数が違います。`;
+    frag.append(p);
+  }
   return frag;
 }
 
-async function openMora() {
+async function openCosts() {
   await loadMaterials();
-  const dialog = $('mora-dialog');
-  const body = $('mora-body');
+  const dialog = $("cost-dialog");
+  const body = $("cost-body");
   body.replaceChildren();
 
-  if (state.materialsError || !state.mora) {
-    const p = document.createElement('p');
-    p.className = 'dlg-missing';
-    p.textContent = state.materialsError ?? 'モラのデータを読み込めませんでした。';
+  if (state.materialsError || !state.costs) {
+    const p = document.createElement("p");
+    p.className = "dlg-missing";
+    p.textContent = state.materialsError ?? "早見表のデータを読み込めませんでした。";
     body.append(p);
     dialog.showModal();
     return;
   }
 
-  const { ascension, talent } = moraRows(state.mora);
-  body.append(moraTable('突破', ascension));
-  body.append(moraTable('天賦（1 つあたり）', talent));
+  const { ascension, talent } = costRows(state.costs);
+  body.append(costTableEl("突破", "ascension", ascension));
+  body.append(costTableEl("天賦（1 つあたり）", "talent", talent));
 
-  const note = document.createElement('p');
-  note.className = 'dlg-note';
-  const perTalent = talent.at(-1)?.total ?? 0;
+  const legend = document.createElement("div");
+  legend.className = "legend";
+  legend.append(document.createTextNode("レアリティ: "));
+  for (const [r, label] of [[1, "白"], [2, "緑"], [3, "青"], [4, "紫"], [5, "金"]]) {
+    const pill = document.createElement("span");
+    pill.className = "rarity";
+    pill.dataset.rarity = String(r);
+    pill.textContent = label;
+    legend.append(pill);
+  }
+  body.append(legend);
+
+  const note = document.createElement("p");
+  note.className = "dlg-note";
+  const perTalent = talent.rows.at(-1)?.moraTotal ?? 0;
   note.textContent =
-    `戦闘天賦は 3 つあるので、すべて Lv.10 まで上げるなら天賦だけで ${(perTalent * 3).toLocaleString('ja-JP')} モラ。` +
-    ' 全キャラ共通の値です。';
+    `小さい数字はそこまでの累計です。戦闘天賦は 3 つあるので、すべて Lv.10 まで上げるなら` +
+    ` 天賦だけで ${(perTalent * 3).toLocaleString("ja-JP")} モラ。全キャラ共通の値です。`;
   body.append(note);
 
   dialog.showModal();
@@ -677,7 +857,9 @@ async function main() {
   $('clear-btn').addEventListener('click', () => {
     store.clear();
     selectionStore.clear();
+    progressStore.clear();
     state.team = [];
+    state.progress = {};
     showRoster({ characters: [], format: null });
     $('input').value = '';
     showImport();
@@ -707,9 +889,9 @@ async function main() {
   $('picked-mats').addEventListener('toggle', () => {
     if ($('picked-mats').open) renderTeam();
   });
-  $('mora-btn').addEventListener('click', openMora);
-  $('mora-close').addEventListener('click', () => $('mora-dialog').close());
-  $('mora-dialog').addEventListener('click', (e) => {
+  $('cost-btn').addEventListener('click', openCosts);
+  $('cost-close').addEventListener('click', () => $('cost-dialog').close());
+  $('cost-dialog').addEventListener('click', (e) => {
     if (e.target === e.currentTarget) e.currentTarget.close();
   });
   // 背景クリックで閉じる（dialog 本体のクリックは中身に当たるので座標では見ない）
@@ -727,6 +909,7 @@ async function main() {
       'キャラ属性データを読み込めませんでした。元素・武器種は ? で表示されます。';
   }
 
+  state.progress = progressStore.load();
   state.team = selectionStore.load().slice(0, TEAM_SIZE);
 
   const saved = store.load();
