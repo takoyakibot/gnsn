@@ -354,53 +354,78 @@ test('describe() は元素可変キャラの天賦を元素ごとの節に分け
 // --- columnFor() ----------------------------------------------------------
 
 const col = (name, done) => columnFor(MATERIALS[name], done);
+const stateOf = (rows, key) => rows.find((r) => r.key === key).state;
+const itemsOf = (rows, key) => rows.find((r) => r.key === key).items;
 
-test('columnFor() は突破 → 天賦 → 共通の順に並べる', () => {
-  const { rows, notes } = col('香菱');
-  assert.deepEqual(rows.map((r) => r.key), ['gem', 'boss', 'local', 'book', 'weeklyBoss', 'crown', 'common']);
-  assert.deepEqual(notes, []);
+test('columnFor() は該当が無くても行を必ず全部返す', () => {
+  // 行を間引くと列ごとに高さが変わって隣の列と見比べられなくなる。
+  const keys = ['gem', 'boss', 'local', 'book', 'weeklyBoss', 'crown', 'common'];
+  for (const name of ['香菱', '旅人', 'ドール（女）']) {
+    assert.deepEqual(col(name).map((r) => r.key), keys, `${name} の行が欠けている`);
+  }
+  assert.deepEqual(columnFor(undefined).map((r) => r.key), keys);
 });
 
-test('columnFor() は育成済みの節を並べず理由を返す', () => {
-  const { rows, notes } = col('香菱', { ascension: true });
-  assert.equal(rows.some((r) => r.key === 'gem'), false, '突破素材が残っている');
-  assert.ok(rows.some((r) => r.key === 'book'), '天賦素材まで消えている');
-  assert.deepEqual(notes, ['突破は育成済み']);
+test('columnFor() は普通のキャラなら全行が埋まる', () => {
+  const rows = col('香菱');
+  assert.equal(rows.every((r) => r.state === 'ok'), true);
+  assert.equal(rows.every((r) => r.items.length > 0), true);
 });
 
-test('columnFor() は両方済みなら何も並べない', () => {
-  const { rows, notes } = col('香菱', { ascension: true, talent: true });
-  assert.deepEqual(rows, []);
-  assert.deepEqual(notes, ['突破は育成済み', '天賦は育成済み']);
+test('columnFor() は育成済みの行を空にして理由を残す', () => {
+  const rows = col('香菱', { ascension: true });
+  assert.equal(stateOf(rows, 'gem'), 'done');
+  assert.deepEqual(itemsOf(rows, 'gem'), [], '突破素材が残っている');
+  assert.equal(stateOf(rows, 'book'), 'ok', '天賦素材まで消えている');
 });
 
-test('columnFor() は元素可変キャラの天賦を列に出さず理由を返す', () => {
-  // 旅人は 6 元素 × 3 系統で列に収まらない。黙って落とさず素材ボタンへ送る。
-  const { rows, notes } = col('旅人');
-  assert.ok(rows.some((r) => r.key === 'gem'), '突破素材まで消えている');
-  assert.equal(rows.some((r) => r.key === 'book'), false, '天賦本が列に出ている');
-  assert.deepEqual(notes, ['天賦は元素別（素材ボタンで見られます）']);
+test('columnFor() は両方済みなら全行が空になる', () => {
+  const rows = col('香菱', { ascension: true, talent: true });
+  assert.equal(rows.every((r) => r.items.length === 0), true);
+  assert.equal(rows.every((r) => r.state === 'done'), true);
 });
 
-test('columnFor() はデータの欠けを理由として返す', () => {
-  assert.deepEqual(col('ドール（女）').notes, ['突破素材のデータなし']);
+test('columnFor() は元素可変キャラの天賦を variant として空にする', () => {
+  // 旅人は 6 元素 × 3 系統で列に収まらない。黙って落とさず素材ダイアログへ送る。
+  const rows = col('旅人');
+  assert.equal(stateOf(rows, 'gem'), 'ok', '突破素材まで消えている');
+  assert.equal(stateOf(rows, 'book'), 'variant');
+  assert.deepEqual(itemsOf(rows, 'book'), []);
+});
+
+test('columnFor() はデータの欠けを missing として区別する', () => {
+  const rows = col('ドール（女）');
+  assert.equal(stateOf(rows, 'gem'), 'missing');
+  assert.equal(stateOf(rows, 'book'), 'ok');
+});
+
+test('columnFor() は元から要らない行を none として区別する', () => {
+  // 旅人は突破にボス素材が無い。データが無いのとは違う。
+  assert.equal(stateOf(col('旅人'), 'boss'), 'none');
+});
+
+test('columnFor() は隠したドロップ元をデータなし扱いしない', () => {
+  // ドロップ元は突破と天賦の両方から来る。突破済みで隠れているだけのものを
+  // 「データなし」と出すと、収録漏れと区別がつかなくなる。
+  assert.equal(stateOf(col('香菱', { ascension: true, talent: true }), 'common'), 'done');
+  // 旅人は Lv.90 想定で突破済み、天賦は元素別。どちらもデータはある。
+  assert.equal(stateOf(col('旅人', { ascension: true }), 'common'), 'done');
+  assert.equal(stateOf(col('旅人'), 'common'), 'ok');
 });
 
 test('columnFor() は空エントリでも落ちない', () => {
-  const { rows, notes } = columnFor(undefined);
-  assert.deepEqual(rows, []);
-  assert.deepEqual(notes, ['突破素材のデータなし', '天賦素材のデータなし']);
+  const rows = columnFor(undefined);
+  assert.equal(rows.every((r) => r.items.length === 0), true);
+  assert.equal(stateOf(rows, 'gem'), 'missing');
 });
 
 test('columnFor() は入手元・図柄・曜日をそのまま渡す', () => {
-  const book = col('香菱').rows.find((r) => r.key === 'book').items[0];
+  const book = itemsOf(col('香菱'), 'book')[0];
   assert.equal(book.name, '「勤労」');
   assert.equal(book.motif, '麦');
   assert.equal(book.region, '璃月');
   assert.deepEqual(book.days, ['火曜', '金曜', '日曜']);
 });
-
-// --- モラ早見表 -----------------------------------------------------------
 
 test('早見表は突破 6 段階・天賦 9 段階', () => {
   assert.equal(COSTS.ascension.rows.length, 6);

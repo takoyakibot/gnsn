@@ -109,31 +109,63 @@ export function describe(entry, done = {}) {
   };
 }
 
+/** 列に必ず並べる行。無い節も空で出して、列どうしの高さを揃える。 */
+export const COLUMN_ROWS = [
+  ['gem', '宝石'],
+  ['boss', 'ボス素材'],
+  ['local', '特産品'],
+  ['book', '天賦本'],
+  ['weeklyBoss', '週ボス素材'],
+  ['crown', '冠'],
+  ['common', 'ドロップ元'],
+];
+
 /**
- * 1 キャラ分を 1 列に並べるための行。describe() の結果を平らにするだけ。
+ * 1 キャラ分を 1 列に並べるための行。
  *
- * 枠の並びに合わせて 4 列で見せるので、列の中は「突破 → 天賦 → 共通」の縦並びになる。
- * 元素可変キャラは元素ごとに 3 系統 × 6 元素で列に収まらないため、列では出さずに
- * 素材ダイアログへ送る（黙って落とさず note を返す）。
+ * 該当が無くても行そのものは必ず返す。行を間引くと列ごとに高さが変わって
+ * 隣の列と見比べられなくなるため、空欄で埋めて揃える。
+ * 空の理由は state に入れる（要らないのか、済んだのか、データが無いのか）。
+ *
+ *   ok      … items に中身がある
+ *   done    … 育成済みなので出さない
+ *   missing … genshin-db にデータが無い
+ *   variant … 元素別で列に収まらない（旅人の天賦。素材ダイアログへ送る）
  */
 export function columnFor(entry, done = {}) {
   const d = describe(entry, done);
-  const rows = [];
-  const notes = [];
+  const ascKeys = new Set(ASCENSION_SECTIONS.map(([k]) => k));
 
-  if (d.ascension.done) notes.push('突破は育成済み');
-  else if (d.ascension.missing) notes.push('突破素材のデータなし');
-  else rows.push(...d.ascension.sections);
+  const found = new Map();
+  for (const s of d.ascension.sections) found.set(s.key, s.items);
+  if (d.talents.length === 1) for (const s of d.talents[0].sections) found.set(s.key, s.items);
+  if (d.common?.length) found.set('common', d.common);
 
-  const variant = d.talents.length > 1;
-  if (d.talents[0]?.done) notes.push('天賦は育成済み');
-  else if (variant) notes.push('天賦は元素別（素材ボタンで見られます）');
-  else if (d.talents[0]?.missing) notes.push('天賦素材のデータなし');
-  else rows.push(...d.talents[0].sections);
+  const variantTalent = d.talents.length > 1;
+  const stateOf = (key) => {
+    if (found.has(key)) return 'ok';
+    // ドロップ元は突破と天賦の両方から来る。片方でも育成済みなら「データが無い」のでは
+    // なく「隠してある」なので、そう出さないと誤解される。
+    if (key === 'common') {
+      if (d.ascension.done) return 'done';
+      if (variantTalent) return 'variant';
+      return 'missing';
+    }
+    if (ascKeys.has(key)) {
+      if (d.ascension.done) return 'done';
+      return d.ascension.missing ? 'missing' : 'none';
+    }
+    if (d.talents[0]?.done) return 'done';
+    if (variantTalent) return 'variant';
+    return d.talents[0]?.missing ? 'missing' : 'none';
+  };
 
-  if (d.common?.length) rows.push({ key: 'common', label: 'ドロップ元', items: d.common });
-
-  return { rows, notes };
+  return COLUMN_ROWS.map(([key, label]) => ({
+    key,
+    label,
+    items: found.get(key) ?? [],
+    state: stateOf(key),
+  }));
 }
 
 /** 早見表の列の順とラベル。 */
