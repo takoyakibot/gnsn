@@ -168,6 +168,7 @@ test('天賦本には秘境名と曜日が素材ごとに付く', () => {
       region: '璃月',
       entrance: '太山府',
       days: ['火曜', '金曜', '日曜'],
+      motif: '麦',
     },
   ]);
 });
@@ -210,20 +211,34 @@ test('図柄は書いてあるものだけ付き、未確認には印が立つ',
   assert.deepEqual(bad, []);
 });
 
-test('確認済みの図柄は印なし、迷いのあるものは印つきで入る', () => {
+test('図柄は実物を見て書いた 20 件が確定で入り、未判読の 1 件は空のまま', () => {
   const books = new Map();
   eachGroup(({ key, items }) => {
     if (key !== 'book') return;
     for (const i of items) if (!books.has(i.name)) books.set(i.name, i);
   });
-  // 実物を見て断定できたものは確定表示
+  assert.equal(books.size, 21);
+
+  const withMotif = [...books.values()].filter((b) => b.motif);
+  assert.equal(withMotif.length, 20);
+  assert.equal(withMotif.filter((b) => b.motifDraft).length, 0, '未確認のまま残っている');
+
+  // 見て分からなかったものは埋めない
+  assert.equal(books.get('「紛争」').motif, undefined);
+
+  // 地域ごとに傾向が出ている（モンドは器物、スメールは花、フォンテーヌは巻物）
+  assert.equal(books.get('「自由」').motif, '風車');
   assert.equal(books.get('「忠言」').motif, '鈴蘭');
-  assert.equal(books.get('「忠言」').motifDraft, undefined);
-  // 見え方に迷いがあるものは未確認のまま
-  assert.equal(books.get('「創意」').motifDraft, true);
-  // まだ見ていないものは何も持たない（推測で埋めない）
-  assert.equal(books.get('「自由」').motif, undefined);
-  assert.equal(books.get('「正義」').motif, undefined);
+  assert.equal(books.get('「正義」').motif, '巻物剣');
+});
+
+test('図柄がすべて別の言葉になっている（見分けがつく）', () => {
+  const motifs = [];
+  eachGroup(({ key, items }) => {
+    if (key !== 'book') return;
+    for (const i of items) if (i.motif && !motifs.includes(i.motif)) motifs.push(i.motif);
+  });
+  assert.equal(new Set(motifs).size, motifs.length, '同じ図柄が 2 系統に付いている');
 });
 
 test('冠は天賦本と混ざらない', () => {
