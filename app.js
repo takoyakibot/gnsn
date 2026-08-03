@@ -23,6 +23,8 @@ const STORAGE_KEY = 'gnsn.roster.v1';
 const SELECTION_KEY = 'gnsn.selection.v1';
 // 育成の済み印。キャラ名 -> { level, talent }
 const PROGRESS_KEY = 'gnsn.progress.v1';
+// 画面の開き具合。絞り込みを開いたままにしたい人が毎回開き直さずに済むように。
+const UI_KEY = 'gnsn.ui.v1';
 const ELEMENTS = ['炎', '水', '風', '雷', '草', '氷', '岩', VARIABLE, UNKNOWN];
 const WEAPONS = ['片手剣', '両手剣', '長柄武器', '弓', '法器', UNKNOWN];
 const TEAM_SIZE = 4;
@@ -121,6 +123,28 @@ const progressStore = {
       localStorage.removeItem(PROGRESS_KEY);
     } catch {
       /* noop */
+    }
+  },
+};
+
+/**
+ * 絞り込みパネルの開閉。既定は閉じる。
+ * 追従させている都合で、開いたままだと狭い画面では一覧を覆ってしまうため、
+ * 「開けておきたい」と自分で開いた人にだけ開いた状態を返す。
+ */
+const uiStore = {
+  loadFilterOpen() {
+    try {
+      return JSON.parse(localStorage.getItem(UI_KEY) ?? 'null')?.filterOpen === true;
+    } catch {
+      return false;
+    }
+  },
+  saveFilterOpen(open) {
+    try {
+      localStorage.setItem(UI_KEY, JSON.stringify({ filterOpen: Boolean(open) }));
+    } catch {
+      /* 保存できなくても表示は続ける */
     }
   },
 };
@@ -268,6 +292,22 @@ function renderShelf() {
     rows.length === state.attached.length
       ? `${rows.length} 体`
       : `${rows.length} / ${state.attached.length} 体`;
+  renderFilterDigest();
+}
+
+/**
+ * 畳んだ絞り込みパネルの見出しに出す要約。
+ * 開かなくても「今どう絞ってあるか」が読めないと、件数が減っている理由が
+ * 分からないまま一覧を見ることになる。
+ */
+function renderFilterDigest() {
+  const parts = [];
+  if (state.elements.size) parts.push([...state.elements].join('・'));
+  if (state.weapons.size) parts.push([...state.weapons].join('・'));
+  if (state.hiddenBands.size) parts.push(`${state.hiddenBands.size} 帯を非表示`);
+  const sortLabel = $('sort').selectedOptions[0]?.textContent;
+  if (state.sort !== 'level' && sortLabel) parts.push(sortLabel);
+  $('filter-digest').textContent = parts.length ? parts.join(' / ') : '';
 }
 
 function toggleTeam(name) {
@@ -787,7 +827,10 @@ function renderStatus() {
   }
 
   const format = saved.format === 'PC' ? 'PC 版' : saved.format === 'SP' ? 'スマホ版' : '不明';
-  const when = saved.savedAt ? new Date(saved.savedAt).toLocaleString('ja-JP') : '';
+  // 秒までは要らない。狭い画面ではその桁のぶんだけ見出しが 2 行になる。
+  const when = saved.savedAt
+    ? new Date(saved.savedAt).toLocaleString('ja-JP', { dateStyle: 'short', timeStyle: 'short' })
+    : '';
   $('status-note').textContent = `${format}の形式として解析${when ? ` · ${when}` : ''}`;
 
   // 属性データに無かった名前。黙って ? にせず、報告できる形で出す。
@@ -819,6 +862,7 @@ function showRoster(saved) {
 
   const has = state.attached.length > 0;
   $('import-panel').hidden = has;
+  $('tagline').hidden = has;
   $('cancel-btn').hidden = true;
   for (const id of ['status-panel', 'filter-panel', 'team-panel', 'shelf-section']) {
     $(id).hidden = !has;
@@ -899,6 +943,10 @@ async function main() {
     renderFilters();
     renderShelf();
   });
+  $('filter-details').open = uiStore.loadFilterOpen();
+  $('filter-details').addEventListener('toggle', () => {
+    uiStore.saveFilterOpen($('filter-details').open);
+  });
   $('mat-close').addEventListener('click', () => $('mat-dialog').close());
   // 開いた瞬間に中身を作る。閉じている間はデータも読まない。
   $('picked-mats').addEventListener('toggle', () => {
@@ -930,6 +978,24 @@ async function main() {
   const saved = store.load();
   if (saved) showRoster(saved);
   else showImport();
+
+  registerServiceWorker();
+}
+
+/**
+ * ホーム画面から起動できるようにし、電波が無いときも開けるようにする。
+ *
+ * 中身は network-first なので、繋がっている限り常に最新を見る（sw.js 参照）。
+ * 一覧の描画が終わってから登録する。起動時の取得と競合させる意味がないため。
+ *
+ * 安全なオリジン（https と localhost）でないと登録は失敗する。file:// で開いた
+ * 場合もここで例外になるが、通常の Web ページとしては動くので黙って見送る。
+ */
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('./sw.js').catch(() => {
+    /* 登録できなくても本体の動作には影響しない */
+  });
 }
 
 main();
