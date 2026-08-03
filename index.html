@@ -117,6 +117,7 @@
         font-size: .82rem; text-transform: none; letter-spacing: .06em;
         margin: 0 0 10px; color: var(--muted); font-weight: 600;
       }
+      .panel h2 .note { margin: 0; letter-spacing: 0; font-weight: 400; }
 
       textarea {
         width: 100%; min-height: 160px; resize: vertical;
@@ -177,6 +178,14 @@
       .stats { display: flex; gap: 18px; flex-wrap: wrap; }
       .stat b { font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; }
       .stat span { display: block; font-size: .72rem; color: var(--muted); letter-spacing: .04em; }
+      @media (max-width: 460px) {
+        /* 数字を大きく積むと 2 行ぶんの高さになる。狭い画面ではその高さが
+           そのまま一覧を画面外へ押し出すので、横に並べて 1 行に詰める。 */
+        .stats { gap: 14px; }
+        .stat { display: flex; align-items: baseline; gap: 4px; }
+        .stat b { font-size: 1.05rem; }
+        .stat span { display: inline; }
+      }
 
       .chips { display: flex; gap: 6px; flex-wrap: wrap; }
       .chip {
@@ -200,10 +209,39 @@
         opacity: .55;
       }
       /* 一覧をスクロールしている間も絞り込みを触れるように上へ貼り付ける。
-         パネルの背景があるので下のカードは透けない。 */
+         パネルの背景があるので下のカードは透けない。
+
+         ただし開いたままだと縦に長い。狭い画面ではこのパネルだけで画面の 6 割を
+         占めて、追従した結果として一覧を覆い隠してしまう（360px 幅で実測 454px）。
+         そのため既定では畳んで細い帯にし、開いたときも中身の高さに上限を置いて、
+         一覧が必ず残るようにしている。畳んだ状態でも見出しに件数と絞り込みの
+         内容を出すので、開かなくても今どう絞られているかは読める。 */
       #filter-panel {
         position: sticky; top: 0; z-index: 5;
         box-shadow: 0 2px 8px rgb(0 0 0 / .06);
+      }
+      #filter-details > summary {
+        display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+        cursor: pointer; list-style: none;
+        font-size: .82rem; letter-spacing: .06em; color: var(--muted); font-weight: 600;
+      }
+      #filter-details > summary::-webkit-details-marker { display: none; }
+      #filter-details > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+      #filter-details > summary .note { margin: 0; letter-spacing: 0; font-weight: 400; }
+      .filter-mark { color: var(--accent); font-weight: 700; }
+      .filter-mark::before { content: '▸'; }
+      #filter-details[open] .filter-mark::before { content: '▾'; }
+      /* 絞り込みが効いているあいだは畳んでいても分かるようにしておく */
+      .filter-digest { color: var(--accent); }
+      .filter-body {
+        margin-top: 10px;
+        /* 開いた状態でも一覧が画面から消えないように高さの上限を置き、あふれたら
+           内側で送る。240px は見出しと余白、それに残しておきたいカード数枚ぶん。
+           画面が広いときは中身のほうが低いので、この上限は効かない。
+           dvh はアドレスバーの出入りに追従する（vh は隠れた状態の高さになる）。 */
+        max-height: max(120px, calc(100vh - 240px));
+        max-height: max(120px, calc(100dvh - 240px));
+        overflow-y: auto;
       }
       .filter-group { margin-bottom: 10px; }
       .filter-group > label { font-size: .74rem; color: var(--muted); display: block; margin-bottom: 5px; }
@@ -256,6 +294,12 @@
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(var(--slot-min), 1fr));
         gap: 8px;
+      }
+      @media (max-width: 460px) {
+        /* 枠が 1 列に落ちると 4 枠で 400px を超え、編成メモだけで画面が埋まって
+           一覧まで届かなくなる。狭い画面では 2 列に詰める。素材の列も同じ変数を
+           共有しているので、2 列でもキャラとの縦の対応は崩れない。 */
+        .team, .picked-cols { --slot-min: 130px; }
       }
       .slot {
         position: relative;
@@ -414,7 +458,11 @@
     <div class="wrap">
       <header>
         <h1>ぐぬすぬ</h1>
-        <p>HoYoLAB の「全キャラクター」画面をコピーして貼り付けると、所持キャラだけが並びます。</p>
+        <!-- 貼り付け前の案内。取り込み済みなら用が済んでいるので隠す。
+             狭い画面ではこの 1 行ぶんも一覧を押し下げる。 -->
+        <p id="tagline">
+          HoYoLAB の「全キャラクター」画面をコピーして貼り付けると、所持キャラだけが並びます。
+        </p>
       </header>
 
       <section class="panel" id="import-panel">
@@ -469,13 +517,14 @@
       </section>
 
       <section class="panel" id="status-panel" hidden>
-        <h2>取り込み結果</h2>
+        <!-- 解析の形式と日時は見出しに寄せる。ボタンの行に置くと狭い画面で
+             折り返して、その 1 行ぶん一覧が下へ押し出される。 -->
+        <h2>取り込み結果 <span class="note" id="status-note"></span></h2>
         <div class="stats" id="stats"></div>
         <div class="row">
           <button id="reimport-btn" type="button">貼り直す</button>
           <button id="clear-btn" type="button">消去</button>
           <button id="cost-btn" type="button">育成早見表</button>
-          <span class="note" id="status-note"></span>
         </div>
         <div class="warn" id="unknown-box" hidden></div>
       </section>
@@ -489,36 +538,44 @@
         </details>
         <div class="row">
           <button id="team-clear" type="button">枠を空にする</button>
-          <span class="note">選んだ 4 人は保存されるので、次に開いたときもそのままです。</span>
+          <span class="note">選んだ 4 人は保存されます。</span>
         </div>
       </section>
 
       <section class="panel" id="filter-panel" hidden>
-        <h2>絞り込み</h2>
-        <div class="filter-group">
-          <label id="lbl-element">元素</label>
-          <div class="chips" id="element-filter" role="group" aria-labelledby="lbl-element"></div>
-        </div>
-        <div class="filter-group">
-          <label id="lbl-weapon">武器種</label>
-          <div class="chips" id="weapon-filter" role="group" aria-labelledby="lbl-weapon"></div>
-        </div>
-        <div class="filter-group">
-          <label id="lbl-level">レベル帯 <span class="hint">押した帯を隠します</span></label>
-          <div class="chips" id="level-filter" role="group" aria-labelledby="lbl-level"></div>
-        </div>
-        <div class="row">
-          <label for="sort" class="note">並び順</label>
-          <select id="sort">
-            <option value="level">レベル順</option>
-            <option value="constellation">凸順</option>
-            <option value="element">元素順</option>
-            <option value="rarity">レアリティ順</option>
-            <option value="name">名前順</option>
-          </select>
-          <button id="reset-filter" type="button">絞り込み解除</button>
-          <span class="note" id="filter-count"></span>
-        </div>
+        <details id="filter-details">
+          <summary>
+            <span class="filter-mark" aria-hidden="true"></span>
+            <span class="filter-title">絞り込み</span>
+            <span class="note" id="filter-count"></span>
+            <span class="note filter-digest" id="filter-digest"></span>
+          </summary>
+          <div class="filter-body">
+            <div class="filter-group">
+              <label id="lbl-element">元素</label>
+              <div class="chips" id="element-filter" role="group" aria-labelledby="lbl-element"></div>
+            </div>
+            <div class="filter-group">
+              <label id="lbl-weapon">武器種</label>
+              <div class="chips" id="weapon-filter" role="group" aria-labelledby="lbl-weapon"></div>
+            </div>
+            <div class="filter-group">
+              <label id="lbl-level">レベル帯 <span class="hint">押した帯を隠します</span></label>
+              <div class="chips" id="level-filter" role="group" aria-labelledby="lbl-level"></div>
+            </div>
+            <div class="row">
+              <label for="sort" class="note">並び順</label>
+              <select id="sort">
+                <option value="level">レベル順</option>
+                <option value="constellation">凸順</option>
+                <option value="element">元素順</option>
+                <option value="rarity">レアリティ順</option>
+                <option value="name">名前順</option>
+              </select>
+              <button id="reset-filter" type="button">絞り込み解除</button>
+            </div>
+          </div>
+        </details>
       </section>
 
       <section id="shelf-section" hidden>
