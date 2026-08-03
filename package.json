@@ -2,7 +2,7 @@
   "name": "gnsn",
   "private": true,
   "type": "module",
-  "description": "所持キャラ名鑑 — HoYoLAB の全キャラクター画面をペーストして所持キャラだけを並べる静的サイト",
+  "description": "ぐぬすぬ — HoYoLAB の全キャラクター画面をペーストして所持キャラだけを並べる静的サイト",
   "scripts": {
     "build:data": "node tools/build.mjs",
     "test": "node --test test/*.test.mjs",

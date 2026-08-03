@@ -102,6 +102,24 @@ function dropSource(name) {
 // 素材名だけでは何を殴ればいいのか分からないので、入手元を添える種別。
 const WITH_SOURCE = new Set(['boss', 'weeklyBoss']);
 
+/**
+ * ボス以外の入手元。素材名を覚えていない人でも「どこで手に入るのか」が分かるようにする。
+ *
+ *   特産品: typeText が「璃月地域の特産」なので地域名を取る
+ *   冠:     sources が「期間限定イベント報酬」
+ *
+ * 宝石は sources が「冒険の証·討伐タブ表示」などの汎用文で入手元にならないため付けない
+ * （元素ボス全般から出るので単一の入手元が存在しない）。
+ */
+function otherSource(material, kind) {
+  if (kind === 'local') {
+    const region = String(material.typeText).match(/^(.+?)地域の特産$/);
+    return region ? region[1] : null;
+  }
+  if (kind === 'crown') return material.sources?.[0] ?? null;
+  return null;
+}
+
 // 畳んだ結果が 1 つになるべき種別。命名規則が変わったら気づけるようにする。
 //
 // 天賦本は含めない。旅人は 1 元素あたり 3 系統すべてを必要とするため
@@ -154,6 +172,9 @@ function collect(costs, section, characterName, problems) {
           continue;
         }
         extra.from = from;
+      } else {
+        const from = otherSource(material, kind);
+        if (from) extra.from = from;
       }
       // 天賦本は系統ごとに秘境の曜日が違う。旅人は 1 元素で 3 系統を必要とし、
       // 系統ごとに別の曜日になるため、グループ単位ではなく素材ごとに持たせる。
@@ -162,8 +183,26 @@ function collect(costs, section, characterName, problems) {
           problems.push(`${characterName}: 天賦本 "${name}" に秘境情報が無い`);
           continue;
         }
-        extra.domain = material.dropDomainName;
+        const place = TALENT_DOMAINS.get(material.dropDomainName);
+        if (!place) {
+          problems.push(
+            `${characterName}: 天賦本 "${name}" の秘境「${material.dropDomainName}」の地域が引けない`,
+          );
+          continue;
+        }
+        // 「熟知秘境：」は全部に付くので落とす。地域と入口が図柄の代わりになる。
+        extra.domain = material.dropDomainName.replace(/^熟知秘境：/, '');
+        extra.region = place.region;
+        extra.entrance = place.entrance;
         extra.days = material.daysOfWeek ?? null;
+        // 図柄はまだ書かれていないものが多い。空なら持たせない。
+        // draft は「未確認」で、画面では ? を添えて薄く出す。
+        const motif = BOOK_MOTIFS.get(collapsed);
+        if (motif) {
+          extra.motif = motif.text;
+          if (motif.draft) extra.motifDraft = true;
+        }
+        seenBooks.add(collapsed);
       }
 
       groups[kind] ??= new Map();
@@ -198,6 +237,50 @@ function collect(costs, section, characterName, problems) {
  *
  * 氷はゲーム内に未実装で、genshin-db にも空のエントリしかないため落とす。
  */
+/**
+ * 天賦秘境の名前 -> 地域と入口。
+ *
+ * 素材名も秘境名も覚えていない人向けに「モンドの忘却の峡谷」という辿り方を出せるようにする。
+ * genshin-db の秘境名は難易度の末尾（`熟知秘境：深炎の底 I`）が付くので落として突き合わせる。
+ * 公式のアイコン画像は二次創作ガイドラインで使えないため、図柄の代わりが地域と入口になる。
+ */
+/**
+ * 天賦本の図柄（日本語）。tools/book-motifs.json を地域ごとの入れ子から平らにする。
+ *
+ * 公式のアイコン画像は二次創作ガイドラインで使えないので、言葉で置き換える。
+ * 空文字は「まだ書いていない」で、画面には出さない。うろ覚えの図柄を出すくらいなら
+ * 何も出さないほうがよい（間違った図柄は名前だけのときより質が悪い）。
+ */
+function bookMotifs() {
+  const raw = JSON.parse(readFileSync(join(ROOT, 'tools/book-motifs.json'), 'utf8'));
+  const flat = new Map();
+  for (const [region, group] of Object.entries(raw)) {
+    if (region.startsWith('_')) continue;
+    for (const [book, value] of Object.entries(group)) {
+      const text = String(value).trim();
+      if (!text) {
+        flat.set(book, null); // 未記入。キーの検査には使うが画面には出さない
+        continue;
+      }
+      // 先頭の ? は「未確認」。実物を見て確かめたら消す運用。
+      const draft = text.startsWith('?');
+      flat.set(book, { text: draft ? text.slice(1).trim() : text, draft });
+    }
+  }
+  return flat;
+}
+
+function talentDomains() {
+  const map = new Map();
+  for (const name of gdb.domains('names', { ...JP, matchCategories: true })) {
+    const d = gdb.domains(name, JP);
+    if (d?.domainText !== '天賦育成素材') continue;
+    const base = d.name.replace(/\s+[IVX]+$/, '');
+    if (!map.has(base)) map.set(base, { region: d.regionName, entrance: d.entranceName });
+  }
+  return map;
+}
+
 function elementVariants() {
   const map = new Map();
   for (const name of gdb.talents('names', { ...JP, matchCategories: true })) {
@@ -213,35 +296,68 @@ function elementVariants() {
 }
 
 /**
- * 段階ごとに必要なモラ。全キャラ共通なのでキャラ側には持たせず一度だけ書き出す。
- * 共通でないキャラが現れたら気づけるように、全員分を突き合わせて検証する。
+ * 段階ごとの必要数の早見表。
+ *
+ * 素材の「名前」はキャラごとに違うが、「どの種別のレアリティ何をいくつ」という構造は
+ * 全キャラ共通。名前を覚えていなくても「Lv.7 なら紫の天賦本が 4 つ」と分かるように、
+ * 種別とレアリティだけの表として書き出す。
+ *
+ * 共通でないキャラが現れたら気づけるよう、全員分を突き合わせて検証する。
+ * 旅人だけは突破にボス素材が無く別パターンになるので、少数派として名前を控える。
  */
-function moraTable(names, problems) {
-  const series = (costs) =>
-    Object.values(costs ?? {}).map((items) => items.find((m) => m.name === 'モラ')?.count ?? 0);
+function costTable(names, talentAliases, problems) {
+  const rowsOf = (costs, section) =>
+    Object.values(costs ?? {}).map((items) => {
+      const row = { mora: 0, items: [] };
+      for (const { name, count } of items) {
+        const material = gdb.materials(name, JP);
+        const kind = material ? classify(material, section) : null;
+        if (!kind) continue;
+        if (kind === 'mora') row.mora += count;
+        else row.items.push({ kind, rarity: material.rarity ?? null, count });
+      }
+      row.items.sort((a, b) => a.kind.localeCompare(b.kind));
+      return row;
+    });
 
-  const seen = { ascension: new Map(), talent: new Map() };
-  for (const name of names) {
-    const rows = {
-      ascension: series(gdb.characters(name, JP)?.costs),
-      talent: series(gdb.talents(name, JP)?.costs),
-    };
-    for (const [section, values] of Object.entries(rows)) {
-      // 全段階 0 はデータが無いキャラ（ドール）。比較対象にしない。
-      if (values.length === 0 || values.every((v) => v === 0)) continue;
-      const key = values.join(',');
-      seen[section].set(key, (seen[section].get(key) ?? []).concat(name));
+  const collect = (section) => {
+    const patterns = new Map();
+    for (const name of names) {
+      const costs =
+        section === 'ascension'
+          ? gdb.characters(name, JP)?.costs
+          : gdb.talents(talentAliases[name] ?? name, JP)?.costs;
+      const rows = rowsOf(costs, section);
+      // 中身が空／モラ 0 のみはデータが無いキャラ（ドール）。比較対象にしない。
+      if (!rows.length || rows.every((r) => r.mora === 0 && r.items.length === 0)) continue;
+      const key = JSON.stringify(rows);
+      patterns.set(key, (patterns.get(key) ?? []).concat(name));
     }
-  }
+    return patterns;
+  };
 
   const table = {};
-  for (const [section, patterns] of Object.entries(seen)) {
-    if (patterns.size !== 1) {
-      const detail = [...patterns].map(([k, who]) => `${who.length}体: ${k}`).join(' / ');
-      problems.push(`${section} のモラがキャラごとに異なる（${detail}）。早見表を共通化できない`);
+  for (const section of ['ascension', 'talent']) {
+    const patterns = collect(section);
+    if (patterns.size === 0) {
+      problems.push(`${section} の必要数を 1 件も取得できなかった`);
       continue;
     }
-    table[section] = [...patterns.keys()][0].split(',').map(Number);
+    // 多数派を代表にする。3 通り以上に割れたら想定外なので気づけるように失敗させる。
+    const sorted = [...patterns].sort((a, b) => b[1].length - a[1].length);
+    if (sorted.length > 2) {
+      const detail = sorted.map(([, who]) => `${who.length}体`).join(' / ');
+      problems.push(`${section} の必要数が ${sorted.length} 通りに割れている（${detail}）。早見表を共通化できない`);
+      continue;
+    }
+    const [[key, majority], minority] = sorted;
+    table[section] = {
+      rows: JSON.parse(key),
+      exceptions: minority ? minority[1] : [],
+    };
+    if (minority && minority[1].length > majority.length) {
+      problems.push(`${section} の多数派が逆転している。早見表の代表を見直すこと`);
+    }
   }
   return table;
 }
@@ -261,6 +377,9 @@ const problems = [];
 // characters 側の名前 -> talents 側の基準名（元素可変キャラの橋渡し）
 const talentAliases = JSON.parse(readFileSync(join(ROOT, 'tools/talent-aliases.json'), 'utf8'));
 const VARIANTS_BY_BASE = elementVariants();
+const TALENT_DOMAINS = talentDomains();
+const BOOK_MOTIFS = bookMotifs();
+const seenBooks = new Set(); // 実在する天賦本の系統（図柄テーブルの検査に使う）
 
 for (const [character, base] of Object.entries(talentAliases)) {
   if (!VARIANTS_BY_BASE.has(base)) {
@@ -373,16 +492,28 @@ const byName = (source) =>
 const sorted = byName(characters);
 const sortedMaterials = byName(materials);
 
-const mora = moraTable(names, problems);
+// 図柄テーブルのキーが実在する天賦本と一致しているか検査する。
+// 名前を書き間違えても黙って無視されると、図柄が出ない理由が分からなくなる。
+const motifKeys = new Set(BOOK_MOTIFS.keys());
+const strayMotifs = [...motifKeys].filter((k) => !seenBooks.has(k));
+const missingMotifs = [...seenBooks].filter((k) => !motifKeys.has(k));
+if (strayMotifs.length || missingMotifs.length) {
+  fail('tools/book-motifs.json のキーが天賦本と噛み合っていない', [
+    ...strayMotifs.map((k) => `${k}: そんな天賦本は無い`),
+    ...missingMotifs.map((k) => `${k}: 図柄テーブルに項目が無い`),
+  ]);
+}
+
+const costs = costTable(names, talentAliases, problems);
 if (problems.length) {
-  fail('モラの必要額を共通化できない', problems);
+  fail('段階ごとの必要数を共通化できない', problems);
 }
 
 mkdirSync(join(ROOT, 'data'), { recursive: true });
 writeFileSync(join(ROOT, 'data/characters.json'), `${JSON.stringify(sorted, null, 1)}\n`, 'utf8');
 writeFileSync(
   join(ROOT, 'data/materials.json'),
-  `${JSON.stringify({ mora, characters: sortedMaterials }, null, 1)}\n`,
+  `${JSON.stringify({ costs, characters: sortedMaterials }, null, 1)}\n`,
   'utf8',
 );
 
@@ -397,7 +528,12 @@ console.log(`  genshin-db から ${names.length} 件`);
 for (const [from, to] of Object.entries(aliases)) console.log(`  別名解決: ${from} <- ${to}`);
 console.log(`  元素可変として扱う: ${variable.map(([k]) => k).join(' / ')}`);
 console.log(`[build:data] ${Object.keys(sortedMaterials).length} 件を data/materials.json に書き出した`);
-console.log(`  モラ早見表（全キャラ共通）: 突破 ${mora.ascension?.length ?? 0} 段階 / 天賦 ${mora.talent?.length ?? 0} 段階`);
+for (const [section, label] of [['ascension', '突破'], ['talent', '天賦']]) {
+  const t = costs[section];
+  if (!t) continue;
+  const ex = t.exceptions.length ? `（例外: ${t.exceptions.join(' / ')}）` : '';
+  console.log(`  ${label}早見表: ${t.rows.length} 段階${ex}`);
+}
 if (noAscension.length) console.log(`  突破素材データなし: ${noAscension.map(([k]) => k).join(' / ')}`);
 if (noTalent.length) console.log(`  天賦素材データなし: ${noTalent.map(([k]) => k).join(' / ')}`);
 for (const [name, v] of byElement) {

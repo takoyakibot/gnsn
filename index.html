@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>所持キャラ名鑑</title>
+    <title>ぐぬすぬ</title>
     <meta name="description" content="HoYoLAB の全キャラクター画面を貼り付けて、所持キャラだけを並べて眺めるツール" />
 
     <!-- ホーム画面から起動できるようにするための manifest。相対パスにしてあるので
@@ -13,19 +13,22 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icons/icon-192.png" />
-    <meta name="theme-color" content="#f4f2ee" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#1a1917" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#eaf2f7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#101d28" media="(prefers-color-scheme: dark)" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="名鑑" />
+    <meta name="apple-mobile-web-app-title" content="ぐぬすぬ" />
 
     <style>
+      /* 配色はゲームのオープニングの空（澄んだ空色）と、そこに差す金色から取っている。
+         公式のイラスト・ロゴ・マークは使わず、色味だけを寄せている。 */
       :root {
-        --bg: #f4f2ee;
-        --panel: #fffdfa;
-        --line: #ddd7cc;
-        --ink: #2a2723;
-        --muted: #7c756a;
-        --accent: #6b5b3e;
+        --bg: #eaf2f7;
+        --bg-far: #d8e8f2;
+        --panel: #fbfdfe;
+        --line: #c9dbe6;
+        --ink: #1e3543;
+        --muted: #63808f;
+        --accent: #b8892f;
         --radius: 10px;
 
         --el-炎: #d9482a;
@@ -35,32 +38,64 @@
         --el-草: #4a9c17;
         --el-氷: #3aa5bd;
         --el-岩: #b0850f;
-        --el-可変: #8a8378;
+        --el-可変: #7b8b95;
+
+        /* 素材の種別色 */
+        --k-gem: #4a86c5;
+        --k-boss: #d9482a;
+        --k-local: #4a9c17;
+        --k-book: #9a5fd0;
+        --k-weekly: #c2483f;
+        --k-crown: #b8892f;
+        --k-common: #63808f;
+
+        /* レアリティ（ゲーム内のアイテム背景に合わせた並び） */
+        --r-1: #7a8b93;
+        --r-2: #3f9e63;
+        --r-3: #4a86c5;
+        --r-4: #9a5fd0;
+        --r-5: #ddb04a;
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --bg: #1a1917;
-          --panel: #23211e;
-          --line: #38342e;
-          --ink: #ece7de;
-          --muted: #9b9284;
-          --accent: #cbb98f;
+          --bg: #101d28;
+          --bg-far: #0a141c;
+          --panel: #172734;
+          --line: #27404f;
+          --ink: #dceaf2;
+          --muted: #8aa7b6;
+          --accent: #e0b968;
 
           --el-炎: #f0705a;
           --el-水: #5cb2e8;
           --el-風: #45d3b4;
+          --el-氷: #61cbe0;
           --el-雷: #b985ea;
           --el-草: #7ec93f;
-          --el-氷: #61cbe0;
           --el-岩: #dcb43f;
-          --el-可変: #a49c8f;
+          --el-可変: #8aa7b6;
+
+          --k-gem: #5fa0dd;
+          --k-boss: #f0705a;
+          --k-local: #7ec93f;
+          --k-book: #b985ea;
+          --k-weekly: #ea7f74;
+          --k-crown: #e0b968;
+          --k-common: #8aa7b6;
+
+          --r-1: #8fa3ad;
+          --r-2: #4fb377;
+          --r-3: #5fa0dd;
+          --r-4: #b07ee0;
+          --r-5: #e6bf5e;
         }
       }
 
       * { box-sizing: border-box; }
       body {
         margin: 0;
-        background: var(--bg);
+        /* 上ほど明るい空のグラデーション。固定して、スクロールしても空のまま。 */
+        background: linear-gradient(180deg, var(--bg) 0%, var(--bg-far) 100%) fixed;
         color: var(--ink);
         font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
         line-height: 1.6;
@@ -102,7 +137,7 @@
       }
       button:hover { border-color: var(--accent); }
       button.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); }
-      @media (prefers-color-scheme: dark) { button.primary { color: #1a1917; } }
+      @media (prefers-color-scheme: dark) { button.primary { color: #101d28; } }
       .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
 
       .note { font-size: .8rem; color: var(--muted); margin: 6px 0 0; }
@@ -127,7 +162,7 @@
         font-size: .85rem;
       }
       .howto-link:hover { background: var(--accent); color: var(--panel); }
-      @media (prefers-color-scheme: dark) { .howto-link:hover { color: #1a1917; } }
+      @media (prefers-color-scheme: dark) { .howto-link:hover { color: #101d28; } }
       .howto-login { margin-top: 8px; }
       .warn {
         border-left: 3px solid var(--el-岩); background: color-mix(in srgb, var(--el-岩) 8%, transparent);
@@ -207,7 +242,15 @@
       .card .el { color: var(--el, var(--muted)); font-weight: 600; }
       .card.unknown { border-left-style: dashed; }
 
-      .team { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+      /* 枠と素材の列は同じグリッド定義を共有する。子の数も揃えてあるので、
+         キャラの並びと素材が縦に揃い、狭くなったときも同じところで折り返す。 */
+      .team,
+      .picked-cols {
+        --slot-min: 190px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(var(--slot-min), 1fr));
+        gap: 8px;
+      }
       .slot {
         position: relative;
         min-height: 62px; border: 1px dashed var(--line); border-radius: 8px;
@@ -220,6 +263,15 @@
         padding-right: 52px;
       }
       .slot .name { font-weight: 600; }
+      /* 育成の済み印。付けるとその分の素材が一覧から消える。 */
+      .progress { display: flex; gap: 10px; margin-top: 5px; }
+      .done-check {
+        display: inline-flex; align-items: center; gap: 3px;
+        font-size: .72rem; color: var(--muted); cursor: pointer; user-select: none;
+      }
+      .done-check input { margin: 0; cursor: pointer; accent-color: var(--accent); }
+      .done-check.auto { cursor: default; opacity: .65; }
+      .done-check.auto input { cursor: default; }
       .resonance { margin-top: 10px; font-size: .85rem; }
       .resonance .none { color: var(--muted); }
 
@@ -231,8 +283,18 @@
       }
       .picked-mats summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       .picked-mats > div { margin-top: 10px; }
-      .mat-who { color: var(--muted); font-size: .92em; }
-      .mat-who::before { content: ' '; }
+      .mat-col {
+        border-left: 3px solid var(--el, var(--el-可変));
+        padding-left: 9px;
+      }
+      .mat-col.empty { border-left-color: transparent; }
+      .mat-col-name { font-weight: 600; font-size: .85rem; margin-bottom: 6px; }
+      /* 列の中は縦並び。ラベルを上に置いて素材を下へ積む。 */
+      .mat-col .mat-group { display: block; margin-bottom: 7px; }
+      .mat-col .mat-group > span { display: block; min-width: 0; padding-top: 0; margin-bottom: 2px; }
+      .mat-col .mat-items { display: flex; width: 100%; }
+      .mat-col .mat-item { white-space: normal; }
+      .mat-col .note { font-size: .74rem; }
 
       dialog {
         border: 1px solid var(--line); border-radius: var(--radius);
@@ -268,14 +330,51 @@
       .mat-item b { font-weight: 600; }
       .mat-from { color: var(--muted); font-size: .95em; }
       .mat-from::before { content: '← '; }
+      /* 天賦本の図柄。正式名称（図柄）の形で添える。
+         未確認のものは薄く斜体にして確定情報と区別する。 */
+      .mat-motif { font-size: .95em; color: var(--k, var(--muted)); font-weight: 600; }
+      .mat-motif.draft { opacity: .6; font-style: italic; font-weight: 400; }
 
-      .mora-table { border-collapse: collapse; font-size: .82rem; }
-      .mora-table th, .mora-table td {
-        padding: 3px 12px 3px 0; text-align: right;
+      /* 素材の種別で色を付ける。名前を覚えていなくても種類で見分けられるように。 */
+      .mat-item[data-kind] {
+        border-color: color-mix(in srgb, var(--k) 45%, var(--line));
+        background: color-mix(in srgb, var(--k) 12%, transparent);
+      }
+      .mat-item[data-kind="gem"] { --k: var(--k-gem); }
+      .mat-item[data-kind="boss"] { --k: var(--k-boss); }
+      .mat-item[data-kind="local"] { --k: var(--k-local); }
+      .mat-item[data-kind="book"] { --k: var(--k-book); }
+      .mat-item[data-kind="weeklyBoss"] { --k: var(--k-weekly); }
+      .mat-item[data-kind="crown"] { --k: var(--k-crown); }
+      .mat-item[data-kind="common"] { --k: var(--k-common); }
+
+      .table-scroll { overflow-x: auto; }
+      .cost-table { border-collapse: collapse; font-size: .82rem; white-space: nowrap; }
+      .cost-table th, .cost-table td {
+        padding: 4px 14px 4px 0; text-align: right;
         font-variant-numeric: tabular-nums; border-bottom: 1px solid var(--line);
       }
-      .mora-table th { color: var(--muted); font-weight: 600; font-size: .74rem; }
-      .mora-table th:first-child, .mora-table td:first-child { text-align: left; }
+      .cost-table th { color: var(--muted); font-weight: 600; font-size: .74rem; }
+      .cost-table th:first-child, .cost-table td:first-child { text-align: left; }
+      .cost-table td.empty { color: var(--muted); opacity: .5; }
+      .cost-table .cum {
+        margin-left: 5px; font-size: .78em; color: var(--muted); opacity: .8;
+      }
+
+      /* レアリティはゲーム内のアイテム背景と同じ並び（白→緑→青→紫→金）。
+         素材名を覚えていなくても「紫がいくつ」で数えられるようにするため。 */
+      .rarity {
+        display: inline-block; min-width: 1.9em; padding: 1px 6px; border-radius: 5px;
+        text-align: center; font-weight: 600; color: #fff;
+        background: var(--r-1);
+      }
+      .rarity[data-rarity="1"] { background: var(--r-1); }
+      .rarity[data-rarity="2"] { background: var(--r-2); }
+      .rarity[data-rarity="3"] { background: var(--r-3); }
+      .rarity[data-rarity="4"] { background: var(--r-4); }
+      .rarity[data-rarity="5"] { background: var(--r-5); color: #3a2a10; }
+      .legend { margin-top: 14px; font-size: .78rem; color: var(--muted); }
+      .legend .rarity { margin-left: 5px; font-size: .9em; }
       .badge {
         font-size: .68rem; padding: 1px 7px; border-radius: 999px;
         border: 1px solid var(--line); color: var(--muted); white-space: nowrap;
@@ -297,7 +396,7 @@
   <body>
     <div class="wrap">
       <header>
-        <h1>所持キャラ名鑑</h1>
+        <h1>ぐぬすぬ</h1>
         <p>HoYoLAB の「全キャラクター」画面をコピーして貼り付けると、所持キャラだけが並びます。</p>
       </header>
 
@@ -358,7 +457,7 @@
         <div class="row">
           <button id="reimport-btn" type="button">貼り直す</button>
           <button id="clear-btn" type="button">消去</button>
-          <button id="mora-btn" type="button">モラ早見表</button>
+          <button id="cost-btn" type="button">育成早見表</button>
           <span class="note" id="status-note"></span>
         </div>
         <div class="warn" id="unknown-box" hidden></div>
@@ -425,13 +524,13 @@
       <div class="dlg-body" id="mat-body"></div>
     </dialog>
 
-    <dialog id="mora-dialog" aria-labelledby="mora-title">
+    <dialog id="cost-dialog" aria-labelledby="cost-title">
       <div class="dlg-head">
-        <h3 id="mora-title">モラ早見表</h3>
-        <span class="sub">段階ごとの必要額</span>
-        <button type="button" id="mora-close">閉じる</button>
+        <h3 id="cost-title">育成早見表</h3>
+        <span class="sub">段階ごとの必要数（全キャラ共通）</span>
+        <button type="button" id="cost-close">閉じる</button>
       </div>
-      <div class="dlg-body" id="mora-body"></div>
+      <div class="dlg-body" id="cost-body"></div>
     </dialog>
 
     <script type="module" src="./app.js"></script>

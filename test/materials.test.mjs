@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 
 import { parse } from '../parse.js';
 import { matchKey } from '../names.js';
-import { aggregate, availableToday, describe, domainWeekday, moraRows } from '../materials.js';
+import { availableToday, columnFor, costRows, describe, domainWeekday } from '../materials.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
@@ -16,7 +16,7 @@ const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 const CHARACTERS = JSON.parse(read('data/characters.json'));
 const FILE = JSON.parse(read('data/materials.json'));
 const MATERIALS = FILE.characters;
-const MORA = FILE.mora;
+const COSTS = FILE.costs;
 const PC = read('test/fixtures/roster-pc.txt');
 
 const GROUP_KEYS = ['gem', 'boss', 'local', 'common', 'book', 'weeklyBoss', 'crown'];
@@ -58,7 +58,7 @@ test('素材データのキーはすべて characters.json に存在する', () 
 });
 
 test('素材が持つのは名前・入手元・秘境・曜日だけ（数量は持たない）', () => {
-  const allowed = new Set(['name', 'from', 'domain', 'days']);
+  const allowed = new Set(['name', 'from', 'domain', 'days', 'region', 'entrance', 'motif', 'motifDraft']);
   const bad = [];
   eachGroup(({ name, section, key, items }) => {
     for (const item of items) {
@@ -140,12 +140,12 @@ test('入手元に「がドロップ」「挑戦報酬」「（Lv.XX以上）」
 test('香菱の素材が期待どおり', () => {
   const m = MATERIALS['香菱'];
   assert.deepEqual(m.ascension.gem, [{ name: '炎願のアゲート' }]);
-  assert.deepEqual(m.ascension.local, [{ name: '絶雲の唐辛子' }]);
+  assert.deepEqual(m.ascension.local, [{ name: '絶雲の唐辛子', from: '璃月' }]);
   assert.deepEqual(m.ascension.boss, [{ name: '常燃の火種', from: '爆炎樹' }]);
   assert.deepEqual(m.ascension.common, [{ name: 'スライム' }]);
   assert.deepEqual(m.talent.book.map((b) => b.name), ['「勤労」']);
   assert.deepEqual(m.talent.weeklyBoss, [{ name: '東風の爪', from: '風魔龍' }]);
-  assert.deepEqual(m.talent.crown, [{ name: '知恵の冠' }]);
+  assert.deepEqual(m.talent.crown, [{ name: '知恵の冠', from: '期間限定イベント報酬' }]);
 });
 
 test('突破のボス素材と天賦の週ボス素材が別々に分類される', () => {
@@ -162,21 +162,87 @@ test('天賦本には秘境名と曜日が素材ごとに付く', () => {
   // 系統ごとに曜日が違い、旅人は 1 元素で 3 系統を必要とする。グループ単位で持つと
   // どの系統がいつ回れるのかが表せない。
   assert.deepEqual(MATERIALS['香菱'].talent.book, [
-    { name: '「勤労」', domain: '熟知秘境：深炎の底', days: ['火曜', '金曜', '日曜'] },
+    {
+      name: '「勤労」',
+      domain: '深炎の底',
+      region: '璃月',
+      entrance: '太山府',
+      days: ['火曜', '金曜', '日曜'],
+      motif: '麦',
+    },
   ]);
 });
 
-test('すべての天賦本が秘境名と曜日を持つ', () => {
+test('すべての天賦本が秘境名・地域・入口・曜日を持つ', () => {
+  // 素材名も秘境名も覚えていない人が「モンドの忘却の峡谷」で辿れるようにするため、
+  // 地域と入口が欠けていないことを検査する。
   const bad = [];
   eachGroup(({ name, key, items }) => {
     if (key !== 'book') return;
-    for (const i of items) if (!i.domain || !i.days?.length) bad.push(`${name}: ${i.name}`);
+    for (const i of items) {
+      if (!i.domain || !i.region || !i.entrance || !i.days?.length) bad.push(`${name}: ${i.name}`);
+    }
   });
   assert.deepEqual(bad, []);
 });
 
+test('秘境名から「熟知秘境：」が落ちている', () => {
+  const bad = [];
+  eachGroup(({ name, key, items }) => {
+    if (key !== 'book') return;
+    for (const i of items) if (/^熟知秘境/.test(i.domain)) bad.push(`${name}: ${i.domain}`);
+  });
+  assert.deepEqual(bad, []);
+});
+
+test('図柄は書いてあるものだけ付き、未確認には印が立つ', () => {
+  // うろ覚えの図柄を確定情報として出さないため、未確認は motifDraft で区別する。
+  const bad = [];
+  eachGroup(({ name, key, items }) => {
+    if (key !== 'book') return;
+    for (const i of items) {
+      if (i.motif !== undefined && !String(i.motif).trim()) bad.push(`${name}: ${i.name} の図柄が空文字`);
+      if (i.motifDraft !== undefined && i.motif === undefined) {
+        bad.push(`${name}: ${i.name} に図柄なしで印だけ付いている`);
+      }
+      if (String(i.motif ?? '').startsWith('?')) bad.push(`${name}: ${i.name} の ? が剥がれていない`);
+    }
+  });
+  assert.deepEqual(bad, []);
+});
+
+test('図柄は実物を見て書いた 20 件が確定で入り、未判読の 1 件は空のまま', () => {
+  const books = new Map();
+  eachGroup(({ key, items }) => {
+    if (key !== 'book') return;
+    for (const i of items) if (!books.has(i.name)) books.set(i.name, i);
+  });
+  assert.equal(books.size, 21);
+
+  const withMotif = [...books.values()].filter((b) => b.motif);
+  assert.equal(withMotif.length, 20);
+  assert.equal(withMotif.filter((b) => b.motifDraft).length, 0, '未確認のまま残っている');
+
+  // 見て分からなかったものは埋めない
+  assert.equal(books.get('「紛争」').motif, undefined);
+
+  // 地域ごとに傾向が出ている（モンドは器物、スメールは花、フォンテーヌは巻物）
+  assert.equal(books.get('「自由」').motif, '風車');
+  assert.equal(books.get('「忠言」').motif, '鈴蘭');
+  assert.equal(books.get('「正義」').motif, '巻物剣');
+});
+
+test('図柄がすべて別の言葉になっている（見分けがつく）', () => {
+  const motifs = [];
+  eachGroup(({ key, items }) => {
+    if (key !== 'book') return;
+    for (const i of items) if (i.motif && !motifs.includes(i.motif)) motifs.push(i.motif);
+  });
+  assert.equal(new Set(motifs).size, motifs.length, '同じ図柄が 2 系統に付いている');
+});
+
 test('冠は天賦本と混ざらない', () => {
-  assert.deepEqual(MATERIALS['香菱'].talent.crown, [{ name: '知恵の冠' }]);
+  assert.equal(MATERIALS['香菱'].talent.crown[0].name, '知恵の冠');
   assert.equal(MATERIALS['香菱'].talent.book.some((i) => i.name === '知恵の冠'), false);
 });
 
@@ -212,7 +278,7 @@ test('旅人の元素別天賦はそれぞれ週ボス素材と冠を持つ', ()
   for (const [element, group] of Object.entries(MATERIALS['旅人'].talentByElement)) {
     assert.equal(group.weeklyBoss?.length, 1, `${element}: 週ボス素材がない`);
     assert.ok(group.weeklyBoss[0].from, `${element}: 週ボス素材に入手元がない`);
-    assert.deepEqual(group.crown, [{ name: '知恵の冠' }], `${element}: 冠がない`);
+    assert.equal(group.crown?.[0]?.name, '知恵の冠', `${element}: 冠がない`);
   }
 });
 
@@ -242,7 +308,7 @@ test('describe() はデータの無い節を missing として返す', () => {
 test('describe() は空エントリでも落ちない', () => {
   const d = describe(undefined);
   assert.equal(d.ascension.missing, true);
-  assert.deepEqual(d.talents, [{ element: null, missing: true, sections: [] }]);
+  assert.deepEqual(d.talents, [{ element: null, missing: true, done: false, sections: [] }]);
   assert.equal(d.common, null);
 });
 
@@ -285,109 +351,126 @@ test('describe() は元素可変キャラの天賦を元素ごとの節に分け
   assert.equal(d.common, null, '元素別なのにドロップ元が共通化されている');
 });
 
-// --- aggregate() ----------------------------------------------------------
+// --- columnFor() ----------------------------------------------------------
 
-const pick = (...names) => names.map((name) => ({ name, entry: MATERIALS[name] }));
+const col = (name, done) => columnFor(MATERIALS[name], done);
 
-test('aggregate() は同じ素材を 1 つに畳んで必要なキャラを並べる', () => {
-  const { sections } = aggregate(pick('香菱', 'ベネット'));
-  const crown = sections.find((s) => s.key === 'crown');
-  assert.equal(crown.items.length, 1, '冠が 2 行に割れている');
-  assert.equal(crown.items[0].name, '知恵の冠');
-  assert.deepEqual(crown.items[0].characters, ['香菱', 'ベネット']);
+test('columnFor() は突破 → 天賦 → 共通の順に並べる', () => {
+  const { rows, notes } = col('香菱');
+  assert.deepEqual(rows.map((r) => r.key), ['gem', 'boss', 'local', 'book', 'weeklyBoss', 'crown', 'common']);
+  assert.deepEqual(notes, []);
 });
 
-test('aggregate() は違う素材を別行にする', () => {
-  const { sections } = aggregate(pick('香菱', '兹白'));
-  const gem = sections.find((s) => s.key === 'gem');
-  assert.deepEqual(
-    gem.items.map((i) => [i.name, i.characters]),
-    [
-      ['炎願のアゲート', ['香菱']],
-      ['堅牢なトパーズ', ['兹白']],
-    ],
-  );
+test('columnFor() は育成済みの節を並べず理由を返す', () => {
+  const { rows, notes } = col('香菱', { ascension: true });
+  assert.equal(rows.some((r) => r.key === 'gem'), false, '突破素材が残っている');
+  assert.ok(rows.some((r) => r.key === 'book'), '天賦素材まで消えている');
+  assert.deepEqual(notes, ['突破は育成済み']);
 });
 
-test('aggregate() の節は定義順に並び、空の節は出ない', () => {
-  const { sections } = aggregate(pick('香菱'));
-  assert.deepEqual(sections.map((s) => s.key), [
-    'gem',
-    'boss',
-    'local',
-    'book',
-    'weeklyBoss',
-    'crown',
-    'common',
-  ]);
+test('columnFor() は両方済みなら何も並べない', () => {
+  const { rows, notes } = col('香菱', { ascension: true, talent: true });
+  assert.deepEqual(rows, []);
+  assert.deepEqual(notes, ['突破は育成済み', '天賦は育成済み']);
 });
 
-test('aggregate() は入手元を保つ', () => {
-  const { sections } = aggregate(pick('香菱'));
-  const boss = sections.find((s) => s.key === 'boss');
-  assert.equal(boss.items[0].name, '常燃の火種');
-  assert.equal(boss.items[0].from, '爆炎樹');
+test('columnFor() は元素可変キャラの天賦を列に出さず理由を返す', () => {
+  // 旅人は 6 元素 × 3 系統で列に収まらない。黙って落とさず素材ボタンへ送る。
+  const { rows, notes } = col('旅人');
+  assert.ok(rows.some((r) => r.key === 'gem'), '突破素材まで消えている');
+  assert.equal(rows.some((r) => r.key === 'book'), false, '天賦本が列に出ている');
+  assert.deepEqual(notes, ['天賦は元素別（素材ボタンで見られます）']);
 });
 
-test('aggregate() は天賦本の秘境と曜日を素材ごとに保つ', () => {
-  const { sections } = aggregate(pick('香菱'));
-  const book = sections.find((s) => s.key === 'book');
-  assert.equal(book.items[0].domain, '熟知秘境：深炎の底');
-  assert.deepEqual(book.items[0].days, ['火曜', '金曜', '日曜']);
+test('columnFor() はデータの欠けを理由として返す', () => {
+  assert.deepEqual(col('ドール（女）').notes, ['突破素材のデータなし']);
 });
 
-test('aggregate() は元素可変キャラの天賦をまとめず、黙って落とさない', () => {
-  // 旅人は 6 元素 × 3 系統で 18 系統になる。まとめに入れると本題が埋もれるので
-  // 突破だけを扱い、天賦は名前を返して画面で断る。
-  const r = aggregate(pick('旅人'));
-  assert.deepEqual(r.elementVariant, ['旅人']);
-  assert.deepEqual(r.sections.map((s) => s.key), ['gem', 'local', 'common']);
-  assert.equal(r.sections.some((s) => s.key === 'book'), false);
-  // 「データが無い」わけではないので partial には入れない
-  assert.deepEqual(r.partial, []);
+test('columnFor() は空エントリでも落ちない', () => {
+  const { rows, notes } = columnFor(undefined);
+  assert.deepEqual(rows, []);
+  assert.deepEqual(notes, ['突破素材のデータなし', '天賦素材のデータなし']);
 });
 
-test('aggregate() はデータの欠けを黙って飲み込まない', () => {
-  const r = aggregate([...pick('ドール（女）'), { name: '未収録キャラ', entry: undefined }]);
-  assert.deepEqual(r.noData, ['未収録キャラ']);
-  assert.deepEqual(r.partial, [{ name: 'ドール（女）', lacking: ['突破'] }]);
-});
-
-test('aggregate() は空でも落ちない', () => {
-  assert.deepEqual(aggregate([]), {
-    sections: [],
-    noData: [],
-    partial: [],
-    elementVariant: [],
-  });
-});
-
-test('aggregate() は同じキャラを二重に数えない', () => {
-  // 共通素材は突破と天賦の両方に入っているので、素朴に集めると 2 回入る
-  const { sections } = aggregate(pick('香菱'));
-  const common = sections.find((s) => s.key === 'common');
-  assert.deepEqual(common.items[0].characters, ['香菱']);
+test('columnFor() は入手元・図柄・曜日をそのまま渡す', () => {
+  const book = col('香菱').rows.find((r) => r.key === 'book').items[0];
+  assert.equal(book.name, '「勤労」');
+  assert.equal(book.motif, '麦');
+  assert.equal(book.region, '璃月');
+  assert.deepEqual(book.days, ['火曜', '金曜', '日曜']);
 });
 
 // --- モラ早見表 -----------------------------------------------------------
 
-test('モラ早見表は突破 6 段階・天賦 9 段階', () => {
-  assert.deepEqual(MORA.ascension, [20000, 40000, 60000, 80000, 100000, 120000]);
-  assert.deepEqual(MORA.talent, [12500, 17500, 25000, 30000, 37500, 120000, 260000, 450000, 700000]);
+test('早見表は突破 6 段階・天賦 9 段階', () => {
+  assert.equal(COSTS.ascension.rows.length, 6);
+  assert.equal(COSTS.talent.rows.length, 9);
 });
 
-test('moraRows() が段階ラベルと累計を返す', () => {
-  const { ascension, talent } = moraRows(MORA);
-  assert.equal(ascension.length, 6);
-  assert.deepEqual(ascension[0], { label: '1段階', amount: 20000, total: 20000 });
-  assert.deepEqual(ascension.at(-1), { label: '6段階', amount: 120000, total: 420000 });
-  assert.equal(talent[0].label, 'Lv.2');
-  assert.equal(talent.at(-1).label, 'Lv.10');
-  assert.equal(talent.at(-1).total, 1652500);
+test('早見表のモラが従来どおり', () => {
+  assert.deepEqual(
+    COSTS.ascension.rows.map((r) => r.mora),
+    [20000, 40000, 60000, 80000, 100000, 120000],
+  );
+  assert.deepEqual(
+    COSTS.talent.rows.map((r) => r.mora),
+    [12500, 17500, 25000, 30000, 37500, 120000, 260000, 450000, 700000],
+  );
 });
 
-test('moraRows() は空でも落ちない', () => {
-  assert.deepEqual(moraRows(undefined), { ascension: [], talent: [] });
+test('早見表は素材の種別とレアリティと個数を持つ', () => {
+  // 1 段階目は 宝石★2×1 / 特産品×3 / 共通素材★1×3
+  assert.deepEqual(COSTS.ascension.rows[0].items, [
+    { kind: 'common', rarity: 1, count: 3 },
+    { kind: 'gem', rarity: 2, count: 1 },
+    { kind: 'local', rarity: null, count: 3 },
+  ]);
+  // Lv.10 は 天賦本★4×16 / 共通素材★3×12 / 冠★5×1 / 週ボス★5×2
+  assert.deepEqual(COSTS.talent.rows.at(-1).items, [
+    { kind: 'book', rarity: 4, count: 16 },
+    { kind: 'common', rarity: 3, count: 12 },
+    { kind: 'crown', rarity: 5, count: 1 },
+    { kind: 'weeklyBoss', rarity: 5, count: 2 },
+  ]);
+});
+
+test('早見表の例外は旅人だけ（突破にボス素材が無い）', () => {
+  assert.deepEqual(COSTS.ascension.exceptions, ['空', '蛍']);
+});
+
+test('costRows() が段階ラベルと累計を返す', () => {
+  const { ascension, talent } = costRows(COSTS);
+  assert.equal(ascension.rows.length, 6);
+  assert.equal(ascension.rows[0].label, '1段階');
+  assert.equal(ascension.rows.at(-1).label, '6段階');
+  assert.equal(ascension.rows.at(-1).moraTotal, 420000);
+  assert.equal(talent.rows[0].label, 'Lv.2');
+  assert.equal(talent.rows.at(-1).label, 'Lv.10');
+  assert.equal(talent.rows.at(-1).moraTotal, 1652500);
+});
+
+test('costRows() は種別ごとに累計する', () => {
+  const { ascension } = costRows(COSTS);
+  const gem = (i) => ascension.rows[i].cells.find((c) => c.kind === 'gem');
+  // 宝石は 1 / 3 / 6 / 3 / 6 / 6 で累計 25
+  assert.deepEqual(ascension.rows.map((_, i) => gem(i).count), [1, 3, 6, 3, 6, 6]);
+  assert.equal(gem(5).total, 25);
+  // 段階が上がるとレアリティも上がる
+  assert.deepEqual(ascension.rows.map((_, i) => gem(i).rarity), [2, 3, 3, 4, 4, 5]);
+});
+
+test('costRows() は無い種別を 0 として返す', () => {
+  const { talent } = costRows(COSTS);
+  const crown = talent.rows[0].cells.find((c) => c.kind === 'crown');
+  assert.equal(crown.count, 0);
+  assert.equal(crown.rarity, null);
+});
+
+test('costRows() は空でも落ちない', () => {
+  assert.deepEqual(costRows(undefined), {
+    ascension: { rows: [], exceptions: [] },
+    talent: { rows: [], exceptions: [] },
+  });
 });
 
 // --- 秘境の曜日 -----------------------------------------------------------

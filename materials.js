@@ -72,7 +72,7 @@ function talentGroups(entry) {
  * ドロップ元は突破と天賦で一致するのが普通なので、その場合は `common` として
  * 一度だけ返す。食い違うキャラ（元素可変キャラは元素ごとに違う）では各節に残す。
  */
-export function describe(entry) {
+export function describe(entry, done = {}) {
   const asc = entry?.ascension ?? null;
   const talents = talentGroups(entry);
 
@@ -92,106 +92,97 @@ export function describe(entry) {
   // 共通化できた場合だけ各節から取り除く（食い違うなら両方に残して差を見せる）
   const withCommon = (order) => (shared ? order : [...order, COMMON_SECTION]);
 
+  // 育成が済んでいる節は「データが無い」とは区別して done で返す。
   return {
     ascension: {
       missing: !asc,
-      sections: sectionsOf(asc, withCommon(ASCENSION_SECTIONS)),
+      done: Boolean(done.ascension),
+      sections: done.ascension ? [] : sectionsOf(asc, withCommon(ASCENSION_SECTIONS)),
     },
     talents: talents.map(({ element, group }) => ({
       element,
       missing: !group,
-      sections: sectionsOf(group, withCommon(TALENT_SECTIONS)),
+      done: Boolean(done.talent),
+      sections: done.talent ? [] : sectionsOf(group, withCommon(TALENT_SECTIONS)),
     })),
-    common: shared,
+    common: done.ascension && done.talent ? null : shared,
   };
 }
 
-/** まとめ表示の順とラベル。突破と天賦を混ぜて素材の種別で並べる。 */
-export const AGGREGATE_SECTIONS = [
-  ['gem', '宝石'],
-  ['boss', 'ボス素材'],
-  ['local', '特産品'],
-  ['book', '天賦本'],
-  ['weeklyBoss', '週ボス素材'],
-  ['crown', '冠'],
-  ['common', 'ドロップ元'],
-];
-
 /**
- * 複数キャラに必要な素材をまとめる。
+ * 1 キャラ分を 1 列に並べるための行。describe() の結果を平らにするだけ。
  *
- * 同じ素材は 1 つに畳んで「誰に必要か」を添える。数量は扱わないので、
- * ここでやるのは重複の除去と、誰が要るのかの紐付けだけ。
- *
- * @param {{name: string, entry: object|null|undefined}[]} picks 選択中のキャラ
+ * 枠の並びに合わせて 4 列で見せるので、列の中は「突破 → 天賦 → 共通」の縦並びになる。
+ * 元素可変キャラは元素ごとに 3 系統 × 6 元素で列に収まらないため、列では出さずに
+ * 素材ダイアログへ送る（黙って落とさず note を返す）。
  */
-export function aggregate(picks) {
-  const buckets = new Map(); // 種別 -> (素材キー -> 行)
-  const noData = []; // 素材データが無いキャラ
-  const partial = []; // 突破か天賦の片方だけデータが無いキャラ
-  const elementVariant = []; // 天賦が元素別のキャラ（まとめには含めない）
+export function columnFor(entry, done = {}) {
+  const d = describe(entry, done);
+  const rows = [];
+  const notes = [];
 
-  for (const { name, entry } of picks) {
-    if (!entry) {
-      noData.push(name);
-      continue;
-    }
+  if (d.ascension.done) notes.push('突破は育成済み');
+  else if (d.ascension.missing) notes.push('突破素材のデータなし');
+  else rows.push(...d.ascension.sections);
 
-    // 元素可変キャラの天賦は元素ごとに別物で、旅人なら 6 元素 × 3 系統になる。
-    // まとめに全部並べると本題が埋もれるので、ここでは突破だけを扱い、天賦は
-    // 1 人分の素材ダイアログに委ねる。黙って落とさず名前を返して画面で断る。
-    const variantTalent = Boolean(entry.talentByElement);
-    if (variantTalent) elementVariant.push(name);
+  const variant = d.talents.length > 1;
+  if (d.talents[0]?.done) notes.push('天賦は育成済み');
+  else if (variant) notes.push('天賦は元素別（素材ボタンで見られます）');
+  else if (d.talents[0]?.missing) notes.push('天賦素材のデータなし');
+  else rows.push(...d.talents[0].sections);
 
-    const lacking = [];
-    if (!entry.ascension) lacking.push("突破");
-    if (!entry.talent && !variantTalent) lacking.push("天賦");
-    if (lacking.length) partial.push({ name, lacking });
+  if (d.common?.length) rows.push({ key: 'common', label: 'ドロップ元', items: d.common });
 
-    for (const group of [entry.ascension, variantTalent ? null : entry.talent]) {
-      if (!group) continue;
-      for (const [key] of AGGREGATE_SECTIONS) {
-        for (const item of group[key] ?? []) {
-          if (!buckets.has(key)) buckets.set(key, new Map());
-          const slot = buckets.get(key);
-          const id = `${item.name} ${item.from ?? ""}`;
-          if (!slot.has(id)) {
-            slot.set(id, {
-              name: item.name,
-              from: item.from ?? null,
-              domain: item.domain ?? null,
-              days: item.days ?? null,
-              characters: [],
-            });
-          }
-          const row = slot.get(id);
-          if (!row.characters.includes(name)) row.characters.push(name);
-        }
-      }
-    }
-  }
-
-  const sections = AGGREGATE_SECTIONS.filter(([key]) => buckets.get(key)?.size).map(
-    ([key, label]) => ({ key, label, items: [...buckets.get(key).values()] }),
-  );
-
-  return { sections, noData, partial, elementVariant };
+  return { rows, notes };
 }
 
+/** 早見表の列の順とラベル。 */
+export const COST_COLUMNS = {
+  ascension: [
+    ['gem', '宝石'],
+    ['boss', 'ボス素材'],
+    ['local', '特産品'],
+    ['common', '共通素材'],
+  ],
+  talent: [
+    ['book', '天賦本'],
+    ['common', '共通素材'],
+    ['weeklyBoss', '週ボス素材'],
+    ['crown', '冠'],
+  ],
+};
+
 /**
- * モラの段階ごと早見表。全キャラ共通の値なのでキャラを渡す必要はない。
- * 累計も返す（早見表として見るとき、そこまでにいくら要るかが知りたくなる）。
+ * 段階ごとの必要数の早見表。素材の名前はキャラごとに違うが、
+ * 「どのレアリティを何個」という構造は全キャラ共通なので表にできる。
+ *
+ * 累計も返す（そこまでに何個要るのかが知りたくなるため）。
  */
-export function moraRows(mora) {
-  const rows = (values, label) => {
-    let running = 0;
-    return (values ?? []).map((amount, i) => {
-      running += amount;
-      return { label: label(i), amount, total: running };
+export function costRows(costs) {
+  const build = (section, label) => {
+    const table = costs?.[section];
+    if (!table?.rows?.length) return { rows: [], exceptions: [] };
+    const columns = COST_COLUMNS[section];
+    const running = new Map();
+    let mora = 0;
+
+    const rows = table.rows.map((row, i) => {
+      mora += row.mora;
+      const cells = columns.map(([kind]) => {
+        const item = row.items.find((x) => x.kind === kind);
+        if (!item) return { kind, rarity: null, count: 0, total: running.get(kind) ?? 0 };
+        const total = (running.get(kind) ?? 0) + item.count;
+        running.set(kind, total);
+        return { kind, rarity: item.rarity, count: item.count, total };
+      });
+      return { label: label(i), cells, mora: row.mora, moraTotal: mora };
     });
+
+    return { rows, exceptions: table.exceptions ?? [] };
   };
+
   return {
-    ascension: rows(mora?.ascension, (i) => `${i + 1}段階`),
-    talent: rows(mora?.talent, (i) => `Lv.${i + 2}`),
+    ascension: build('ascension', (i) => `${i + 1}段階`),
+    talent: build('talent', (i) => `Lv.${i + 2}`),
   };
 }
