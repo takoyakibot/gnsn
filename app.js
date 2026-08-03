@@ -27,6 +27,14 @@ const PROGRESS_KEY = 'gnsn.progress.v1';
 const UI_KEY = 'gnsn.ui.v1';
 const ELEMENTS = ['炎', '水', '風', '雷', '草', '氷', '岩', VARIABLE, UNKNOWN];
 const WEAPONS = ['片手剣', '両手剣', '長柄武器', '弓', '法器', UNKNOWN];
+// 並び順。先頭が既定。visible() の comparators のキーと対応している。
+const SORTS = [
+  ['level', 'レベル順'],
+  ['constellation', '凸順'],
+  ['element', '元素順'],
+  ['rarity', 'レアリティ順'],
+  ['name', '名前順'],
+];
 const TEAM_SIZE = 4;
 
 const $ = (id) => document.getElementById(id);
@@ -202,6 +210,26 @@ function renderFilters() {
   build($('element-filter'), ELEMENTS, state.elements, 'element', true);
   build($('weapon-filter'), WEAPONS, state.weapons, 'weapon', false);
   renderBandFilter();
+  renderSortChips();
+}
+
+/**
+ * 並び順。元素・武器種と違って必ず 1 つだけ選ばれている状態なので、
+ * 押すと切り替わる（もう一度押しても外れない）。
+ */
+function renderSortChips() {
+  const host = $('sort-filter');
+  host.replaceChildren();
+  for (const [key, label] of SORTS) {
+    const b = chip(label, state.sort === key);
+    b.addEventListener('click', () => {
+      if (state.sort === key) return;
+      state.sort = key;
+      renderSortChips();
+      renderShelf();
+    });
+    host.append(b);
+  }
 }
 
 /**
@@ -305,8 +333,11 @@ function renderFilterDigest() {
   if (state.elements.size) parts.push([...state.elements].join('・'));
   if (state.weapons.size) parts.push([...state.weapons].join('・'));
   if (state.hiddenBands.size) parts.push(`${state.hiddenBands.size} 帯を非表示`);
-  const sortLabel = $('sort').selectedOptions[0]?.textContent;
-  if (state.sort !== 'level' && sortLabel) parts.push(sortLabel);
+  // 既定の並び順は言わない（変えているときだけ畳んだ見出しに出す）
+  if (state.sort !== SORTS[0][0]) {
+    const label = SORTS.find(([k]) => k === state.sort)?.[1];
+    if (label) parts.push(label);
+  }
   $('filter-digest').textContent = parts.length ? parts.join(' / ') : '';
 }
 
@@ -932,10 +963,7 @@ async function main() {
     renderTeam();
     renderShelf();
   });
-  $('sort').addEventListener('change', (e) => {
-    state.sort = e.target.value;
-    renderShelf();
-  });
+  // 並び順は絞り込みではないので、解除では触らない（見ている順を勝手に戻さない）
   $('reset-filter').addEventListener('click', () => {
     state.elements.clear();
     state.weapons.clear();

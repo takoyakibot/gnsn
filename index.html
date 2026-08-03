@@ -267,6 +267,11 @@
         position: sticky; top: 0; z-index: 5;
         box-shadow: 0 2px 8px rgb(0 0 0 / .06);
       }
+      /* details と解除ボタンを横に並べ、見出しの行の右端に解除が来るようにする。
+         align-items: flex-start なので、開いても解除は見出しの行に残る。 */
+      .filter-head { display: flex; align-items: flex-start; gap: 10px; }
+      .filter-head > #filter-details { flex: 1; min-width: 0; }
+      .filter-head > #reset-filter { flex: none; }
       #filter-details > summary {
         display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
         cursor: pointer; list-style: none;
@@ -596,39 +601,37 @@
       </section>
 
       <section class="panel" id="filter-panel" hidden>
-        <details id="filter-details">
-          <summary>
-            <span class="filter-mark" aria-hidden="true"></span>
-            <span class="filter-title">絞り込み</span>
-            <span class="note" id="filter-count"></span>
-            <span class="note filter-digest" id="filter-digest"></span>
-          </summary>
-          <div class="filter-body">
-            <div class="filter-group">
-              <label id="lbl-element">元素</label>
-              <div class="chips" id="element-filter" role="group" aria-labelledby="lbl-element"></div>
+        <!-- 解除は畳んだままでも押せるように、見出しの行の右端に置く。summary の
+             中に入れると開閉と押し合いになるので、隣に並べて同じ行に見せている。 -->
+        <div class="filter-head">
+          <details id="filter-details">
+            <summary>
+              <span class="filter-mark" aria-hidden="true"></span>
+              <span class="filter-title">絞り込み</span>
+              <span class="note" id="filter-count"></span>
+              <span class="note filter-digest" id="filter-digest"></span>
+            </summary>
+            <div class="filter-body">
+              <div class="filter-group">
+                <label id="lbl-element">元素</label>
+                <div class="chips" id="element-filter" role="group" aria-labelledby="lbl-element"></div>
+              </div>
+              <div class="filter-group">
+                <label id="lbl-weapon">武器種</label>
+                <div class="chips" id="weapon-filter" role="group" aria-labelledby="lbl-weapon"></div>
+              </div>
+              <div class="filter-group">
+                <label id="lbl-level">レベル帯 <span class="hint">押した帯を隠します</span></label>
+                <div class="chips" id="level-filter" role="group" aria-labelledby="lbl-level"></div>
+              </div>
+              <div class="filter-group">
+                <label id="lbl-sort">並び順</label>
+                <div class="chips" id="sort-filter" role="group" aria-labelledby="lbl-sort"></div>
+              </div>
             </div>
-            <div class="filter-group">
-              <label id="lbl-weapon">武器種</label>
-              <div class="chips" id="weapon-filter" role="group" aria-labelledby="lbl-weapon"></div>
-            </div>
-            <div class="filter-group">
-              <label id="lbl-level">レベル帯 <span class="hint">押した帯を隠します</span></label>
-              <div class="chips" id="level-filter" role="group" aria-labelledby="lbl-level"></div>
-            </div>
-            <div class="row">
-              <label for="sort" class="note">並び順</label>
-              <select id="sort">
-                <option value="level">レベル順</option>
-                <option value="constellation">凸順</option>
-                <option value="element">元素順</option>
-                <option value="rarity">レアリティ順</option>
-                <option value="name">名前順</option>
-              </select>
-              <button id="reset-filter" type="button">絞り込み解除</button>
-            </div>
-          </div>
-        </details>
+          </details>
+          <button id="reset-filter" type="button">絞り込み解除</button>
+        </div>
       </section>
 
       <section id="shelf-section" hidden>
