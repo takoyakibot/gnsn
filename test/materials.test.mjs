@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 
 import { parse } from '../parse.js';
 import { matchKey } from '../names.js';
-import { aggregate, availableToday, costRows, describe, domainWeekday } from '../materials.js';
+import { availableToday, columnFor, costRows, describe, domainWeekday } from '../materials.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
@@ -351,89 +351,53 @@ test('describe() は元素可変キャラの天賦を元素ごとの節に分け
   assert.equal(d.common, null, '元素別なのにドロップ元が共通化されている');
 });
 
-// --- aggregate() ----------------------------------------------------------
+// --- columnFor() ----------------------------------------------------------
 
-const pick = (...names) => names.map((name) => ({ name, entry: MATERIALS[name] }));
+const col = (name, done) => columnFor(MATERIALS[name], done);
 
-test('aggregate() は同じ素材を 1 つに畳んで必要なキャラを並べる', () => {
-  const { sections } = aggregate(pick('香菱', 'ベネット'));
-  const crown = sections.find((s) => s.key === 'crown');
-  assert.equal(crown.items.length, 1, '冠が 2 行に割れている');
-  assert.equal(crown.items[0].name, '知恵の冠');
-  assert.deepEqual(crown.items[0].characters, ['香菱', 'ベネット']);
+test('columnFor() は突破 → 天賦 → 共通の順に並べる', () => {
+  const { rows, notes } = col('香菱');
+  assert.deepEqual(rows.map((r) => r.key), ['gem', 'boss', 'local', 'book', 'weeklyBoss', 'crown', 'common']);
+  assert.deepEqual(notes, []);
 });
 
-test('aggregate() は違う素材を別行にする', () => {
-  const { sections } = aggregate(pick('香菱', '兹白'));
-  const gem = sections.find((s) => s.key === 'gem');
-  assert.deepEqual(
-    gem.items.map((i) => [i.name, i.characters]),
-    [
-      ['炎願のアゲート', ['香菱']],
-      ['堅牢なトパーズ', ['兹白']],
-    ],
-  );
+test('columnFor() は育成済みの節を並べず理由を返す', () => {
+  const { rows, notes } = col('香菱', { ascension: true });
+  assert.equal(rows.some((r) => r.key === 'gem'), false, '突破素材が残っている');
+  assert.ok(rows.some((r) => r.key === 'book'), '天賦素材まで消えている');
+  assert.deepEqual(notes, ['突破は育成済み']);
 });
 
-test('aggregate() の節は定義順に並び、空の節は出ない', () => {
-  const { sections } = aggregate(pick('香菱'));
-  assert.deepEqual(sections.map((s) => s.key), [
-    'gem',
-    'boss',
-    'local',
-    'book',
-    'weeklyBoss',
-    'crown',
-    'common',
-  ]);
+test('columnFor() は両方済みなら何も並べない', () => {
+  const { rows, notes } = col('香菱', { ascension: true, talent: true });
+  assert.deepEqual(rows, []);
+  assert.deepEqual(notes, ['突破は育成済み', '天賦は育成済み']);
 });
 
-test('aggregate() は入手元を保つ', () => {
-  const { sections } = aggregate(pick('香菱'));
-  const boss = sections.find((s) => s.key === 'boss');
-  assert.equal(boss.items[0].name, '常燃の火種');
-  assert.equal(boss.items[0].from, '爆炎樹');
+test('columnFor() は元素可変キャラの天賦を列に出さず理由を返す', () => {
+  // 旅人は 6 元素 × 3 系統で列に収まらない。黙って落とさず素材ボタンへ送る。
+  const { rows, notes } = col('旅人');
+  assert.ok(rows.some((r) => r.key === 'gem'), '突破素材まで消えている');
+  assert.equal(rows.some((r) => r.key === 'book'), false, '天賦本が列に出ている');
+  assert.deepEqual(notes, ['天賦は元素別（素材ボタンで見られます）']);
 });
 
-test('aggregate() は天賦本の秘境と曜日を素材ごとに保つ', () => {
-  const { sections } = aggregate(pick('香菱'));
-  const book = sections.find((s) => s.key === 'book');
-  assert.equal(book.items[0].domain, '深炎の底');
-  assert.deepEqual(book.items[0].days, ['火曜', '金曜', '日曜']);
+test('columnFor() はデータの欠けを理由として返す', () => {
+  assert.deepEqual(col('ドール（女）').notes, ['突破素材のデータなし']);
 });
 
-test('aggregate() は元素可変キャラの天賦をまとめず、黙って落とさない', () => {
-  // 旅人は 6 元素 × 3 系統で 18 系統になる。まとめに入れると本題が埋もれるので
-  // 突破だけを扱い、天賦は名前を返して画面で断る。
-  const r = aggregate(pick('旅人'));
-  assert.deepEqual(r.elementVariant, ['旅人']);
-  assert.deepEqual(r.sections.map((s) => s.key), ['gem', 'local', 'common']);
-  assert.equal(r.sections.some((s) => s.key === 'book'), false);
-  // 「データが無い」わけではないので partial には入れない
-  assert.deepEqual(r.partial, []);
+test('columnFor() は空エントリでも落ちない', () => {
+  const { rows, notes } = columnFor(undefined);
+  assert.deepEqual(rows, []);
+  assert.deepEqual(notes, ['突破素材のデータなし', '天賦素材のデータなし']);
 });
 
-test('aggregate() はデータの欠けを黙って飲み込まない', () => {
-  const r = aggregate([...pick('ドール（女）'), { name: '未収録キャラ', entry: undefined }]);
-  assert.deepEqual(r.noData, ['未収録キャラ']);
-  assert.deepEqual(r.partial, [{ name: 'ドール（女）', lacking: ['突破'] }]);
-});
-
-test('aggregate() は空でも落ちない', () => {
-  assert.deepEqual(aggregate([]), {
-    sections: [],
-    noData: [],
-    partial: [],
-    elementVariant: [],
-    done: [],
-  });
-});
-
-test('aggregate() は同じキャラを二重に数えない', () => {
-  // 共通素材は突破と天賦の両方に入っているので、素朴に集めると 2 回入る
-  const { sections } = aggregate(pick('香菱'));
-  const common = sections.find((s) => s.key === 'common');
-  assert.deepEqual(common.items[0].characters, ['香菱']);
+test('columnFor() は入手元・図柄・曜日をそのまま渡す', () => {
+  const book = col('香菱').rows.find((r) => r.key === 'book').items[0];
+  assert.equal(book.name, '「勤労」');
+  assert.equal(book.motif, '麦');
+  assert.equal(book.region, '璃月');
+  assert.deepEqual(book.days, ['火曜', '金曜', '日曜']);
 });
 
 // --- モラ早見表 -----------------------------------------------------------

@@ -242,7 +242,15 @@
       .card .el { color: var(--el, var(--muted)); font-weight: 600; }
       .card.unknown { border-left-style: dashed; }
 
-      .team { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+      /* 枠と素材の列は同じグリッド定義を共有する。子の数も揃えてあるので、
+         キャラの並びと素材が縦に揃い、狭くなったときも同じところで折り返す。 */
+      .team,
+      .picked-cols {
+        --slot-min: 190px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(var(--slot-min), 1fr));
+        gap: 8px;
+      }
       .slot {
         position: relative;
         min-height: 62px; border: 1px dashed var(--line); border-radius: 8px;
@@ -275,8 +283,18 @@
       }
       .picked-mats summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       .picked-mats > div { margin-top: 10px; }
-      .mat-who { color: var(--muted); font-size: .92em; }
-      .mat-who::before { content: ' '; }
+      .mat-col {
+        border-left: 3px solid var(--el, var(--el-可変));
+        padding-left: 9px;
+      }
+      .mat-col.empty { border-left-color: transparent; }
+      .mat-col-name { font-weight: 600; font-size: .85rem; margin-bottom: 6px; }
+      /* 列の中は縦並び。ラベルを上に置いて素材を下へ積む。 */
+      .mat-col .mat-group { display: block; margin-bottom: 7px; }
+      .mat-col .mat-group > span { display: block; min-width: 0; padding-top: 0; margin-bottom: 2px; }
+      .mat-col .mat-items { display: flex; width: 100%; }
+      .mat-col .mat-item { white-space: normal; }
+      .mat-col .note { font-size: .74rem; }
 
       dialog {
         border: 1px solid var(--line); border-radius: var(--radius);

@@ -15,7 +15,7 @@ import {
   UNKNOWN,
   VARIABLE,
 } from './roster.js';
-import { aggregate, availableToday, COST_COLUMNS, costRows, describe } from './materials.js';
+import { availableToday, columnFor, COST_COLUMNS, costRows, describe } from './materials.js';
 import { matchKey } from './names.js';
 
 const STORAGE_KEY = 'gnsn.roster.v1';
@@ -400,7 +400,10 @@ function renderTeam() {
 }
 
 /**
- * 選択中のキャラに必要な素材をまとめて出す。枠の下のアコーディオン。
+ * 選択中のキャラに必要な素材を、枠と同じ 4 列で出す。枠の下のアコーディオン。
+ *
+ * 列は枠と同じグリッド定義を共有しているので、キャラの並びと縦に揃い、
+ * 幅が狭くなったときも枠と同じところで折り返す。
  * 開いたときに初めて素材データを取りに行く（棚の描画には要らないため）。
  */
 async function renderPickedMaterials(members) {
@@ -429,38 +432,48 @@ async function renderPickedMaterials(members) {
     return;
   }
 
-  const picks = members.map((c) => ({
-    name: c.name,
-    entry: state.materials?.get(matchKey(c.name)),
-    ...doneFlags(c),
-  }));
-  const { sections, noData, partial, elementVariant, done } = aggregate(picks);
+  const grid = document.createElement('div');
+  grid.className = 'picked-cols';
 
-  for (const s of sections) {
-    body.append(
-      materialGroup(
-        s.label,
-        s.items.map((i) => ({ ...i, who: i.characters })),
-        s.key,
-      ),
-    );
+  // 空き枠のぶんも列を作る。数が揃っていないと枠と縦がずれる。
+  for (let i = 0; i < TEAM_SIZE; i++) {
+    const c = members[i];
+    const col = document.createElement('div');
+    col.className = c ? 'mat-col' : 'mat-col empty';
+    if (!c) {
+      grid.append(col);
+      continue;
+    }
+
+    col.style.setProperty('--el', elementVar(c.element));
+    const head = document.createElement('div');
+    head.className = 'mat-col-name';
+    head.textContent = c.name;
+    col.append(head);
+
+    const entry = state.materials?.get(matchKey(c.name));
+    if (!entry) {
+      const p = document.createElement('p');
+      p.className = 'note';
+      p.textContent = '素材データがありません。';
+      col.append(p);
+      grid.append(col);
+      continue;
+    }
+
+    const { rows, notes } = columnFor(entry, doneFlags(c));
+    for (const r of rows) col.append(materialGroup(r.label, r.items, r.key));
+    // 「素材が要らない」と「データが無い」「育成済み」を混同させない。
+    for (const text of notes) {
+      const n = document.createElement('p');
+      n.className = 'note';
+      n.textContent = `${text}。`;
+      col.append(n);
+    }
+    grid.append(col);
   }
 
-  // 「素材が要らない」と「データが無い」を混同させないため、欠けは明示する。
-  const gaps = [
-    ...noData.map((name) => `${name}: 素材データがありません`),
-    ...partial.map((p) => `${p.name}: ${p.lacking.join('・')}素材のデータがありません`),
-    ...elementVariant.map(
-      (name) => `${name}: 天賦素材は元素ごとに別物なので、まとめには入れていません（素材ボタンで見られます）`,
-    ),
-    ...done.map((d) => `${d.name}: ${d.skipped.join("・")}は育成済みなので省いています`),
-  ];
-  for (const text of gaps) {
-    const n = document.createElement('p');
-    n.className = 'note';
-    n.textContent = `${text}。`;
-    body.append(n);
-  }
+  body.append(grid);
 }
 
 // --- 素材（突破・天賦） ----------------------------------------------------
