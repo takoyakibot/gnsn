@@ -70,22 +70,6 @@ export function unknownNames(attached) {
   return [...new Set(attached.filter((c) => !c.known).map((c) => c.name))];
 }
 
-/**
- * 元素共鳴の判定。同一元素が 2 人以上いれば共鳴あり。
- * 「可変」と「?」は元素が確定しないので判定から除外する。
- */
-export function resonance(team) {
-  const counts = new Map();
-  for (const c of team) {
-    if (!c || c.element === VARIABLE || c.element === UNKNOWN) continue;
-    counts.set(c.element, (counts.get(c.element) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .filter(([, n]) => n >= 2)
-    .map(([element, count]) => ({ element, count }))
-    .sort((a, b) => b.count - a.count || a.element.localeCompare(b.element, 'ja'));
-}
-
 export function stats(attached) {
   return {
     total: attached.length,

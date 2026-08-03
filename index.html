@@ -199,6 +199,12 @@
         text-decoration: line-through;
         opacity: .55;
       }
+      /* 一覧をスクロールしている間も絞り込みを触れるように上へ貼り付ける。
+         パネルの背景があるので下のカードは透けない。 */
+      #filter-panel {
+        position: sticky; top: 0; z-index: 5;
+        box-shadow: 0 2px 8px rgb(0 0 0 / .06);
+      }
       .filter-group { margin-bottom: 10px; }
       .filter-group > label { font-size: .74rem; color: var(--muted); display: block; margin-bottom: 5px; }
       .filter-group .hint { opacity: .75; }
@@ -272,9 +278,6 @@
       .done-check input { margin: 0; cursor: pointer; accent-color: var(--accent); }
       .done-check.auto { cursor: default; opacity: .65; }
       .done-check.auto input { cursor: default; }
-      .resonance { margin-top: 10px; font-size: .85rem; }
-      .resonance .none { color: var(--muted); }
-
       /* 選択中のキャラに必要な素材のまとめ。枠のすぐ下に折りたたんで置く。 */
       .picked-mats { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
       .picked-mats summary {
@@ -293,7 +296,19 @@
       .mat-col .mat-group { display: block; margin-bottom: 7px; }
       .mat-col .mat-group > span { display: block; min-width: 0; padding-top: 0; margin-bottom: 2px; }
       .mat-col .mat-items { display: flex; width: 100%; }
-      .mat-col .mat-item { white-space: normal; }
+      /* 折り返すと行の高さが列ごとに変わって隣と見比べられなくなるので、
+         1 行に収まらないぶんは省略記号で切る。全文は tooltip に入れてある。 */
+      .mat-col .mat-item {
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        max-width: 100%; display: block;
+      }
+      /* 空欄はチップと同じ箱の寸法にする。揃っていないと行の位置が列ごとにずれて、
+         隣の列と横に見比べられなくなる。 */
+      .mat-col .mat-empty {
+        display: block; font-size: .8rem; line-height: inherit;
+        padding: 1px 8px; border: 1px dashed var(--line); border-radius: 5px;
+        color: var(--muted); opacity: .55;
+      }
       .mat-col .note { font-size: .74rem; }
 
       dialog {
@@ -350,12 +365,14 @@
 
       .table-scroll { overflow-x: auto; }
       .cost-table { border-collapse: collapse; font-size: .82rem; white-space: nowrap; }
+      /* 素材の列は左揃え。個数と累計が左端で縦に揃うほうが段階ごとの増え方を追いやすい。
+         段階名も左、モラだけは桁を見るので右揃えにする。 */
       .cost-table th, .cost-table td {
-        padding: 4px 14px 4px 0; text-align: right;
+        padding: 4px 14px 4px 0; text-align: left;
         font-variant-numeric: tabular-nums; border-bottom: 1px solid var(--line);
       }
       .cost-table th { color: var(--muted); font-weight: 600; font-size: .74rem; }
-      .cost-table th:first-child, .cost-table td:first-child { text-align: left; }
+      .cost-table th:last-child, .cost-table td.mora { text-align: right; }
       .cost-table td.empty { color: var(--muted); opacity: .5; }
       .cost-table .cum {
         margin-left: 5px; font-size: .78em; color: var(--muted); opacity: .8;
@@ -463,6 +480,19 @@
         <div class="warn" id="unknown-box" hidden></div>
       </section>
 
+      <section class="panel" id="team-panel" hidden>
+        <h2>編成メモ / 育成予定</h2>
+        <div class="team" id="team"></div>
+        <details class="picked-mats" id="picked-mats" hidden>
+          <summary id="picked-mats-summary"></summary>
+          <div id="picked-mats-body"></div>
+        </details>
+        <div class="row">
+          <button id="team-clear" type="button">枠を空にする</button>
+          <span class="note">選んだ 4 人は保存されるので、次に開いたときもそのままです。</span>
+        </div>
+      </section>
+
       <section class="panel" id="filter-panel" hidden>
         <h2>絞り込み</h2>
         <div class="filter-group">
@@ -488,20 +518,6 @@
           </select>
           <button id="reset-filter" type="button">絞り込み解除</button>
           <span class="note" id="filter-count"></span>
-        </div>
-      </section>
-
-      <section class="panel" id="team-panel" hidden>
-        <h2>編成メモ / 育成予定</h2>
-        <div class="team" id="team"></div>
-        <div class="resonance" id="resonance"></div>
-        <details class="picked-mats" id="picked-mats" hidden>
-          <summary id="picked-mats-summary"></summary>
-          <div id="picked-mats-body"></div>
-        </details>
-        <div class="row">
-          <button id="team-clear" type="button">枠を空にする</button>
-          <span class="note">選んだ 4 人は保存されるので、次に開いたときもそのままです。</span>
         </div>
       </section>
 

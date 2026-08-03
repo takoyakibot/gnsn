@@ -8,7 +8,6 @@ import {
   buildIndex,
   LAST_ASCENSION_LEVEL,
   LEVEL_BANDS,
-  resonance,
   stats,
   talentDone,
   unknownNames,
@@ -369,33 +368,6 @@ function renderTeam() {
     host.append(slot);
   }
 
-  const box = $('resonance');
-  box.replaceChildren();
-  const found = resonance(members);
-  if (found.length === 0) {
-    const s = document.createElement('span');
-    s.className = 'none';
-    s.textContent =
-      members.length === 0 ? '棚のカードを押すと枠に入ります。' : '元素共鳴なし';
-    box.append(s);
-  } else {
-    box.append(document.createTextNode('元素共鳴: '));
-    for (const r of found) {
-      const s = document.createElement('b');
-      s.style.color = elementVar(r.element);
-      s.textContent = `${r.element}（${r.count}人）`;
-      box.append(s, document.createTextNode(' '));
-    }
-  }
-
-  const variable = members.filter((c) => c.element === VARIABLE || c.element === UNKNOWN);
-  if (variable.length) {
-    const n = document.createElement('div');
-    n.className = 'note';
-    n.textContent = `${variable.map((c) => c.name).join(' / ')} は元素が確定しないため共鳴判定から除外しています。`;
-    box.append(n);
-  }
-
   renderPickedMaterials(members);
 }
 
@@ -461,14 +433,25 @@ async function renderPickedMaterials(members) {
       continue;
     }
 
-    const { rows, notes } = columnFor(entry, doneFlags(c));
-    for (const r of rows) col.append(materialGroup(r.label, r.items, r.key));
-    // 「素材が要らない」と「データが無い」「育成済み」を混同させない。
-    for (const text of notes) {
-      const n = document.createElement('p');
-      n.className = 'note';
-      n.textContent = `${text}。`;
-      col.append(n);
+    // 行は必ず全部出す。間引くと列ごとに高さが変わって隣と見比べられなくなる。
+    const EMPTY = { done: '育成済み', missing: 'データなし', variant: '元素別（素材ボタン）', none: '—' };
+    for (const r of columnFor(entry, doneFlags(c))) {
+      if (r.items.length) {
+        col.append(materialGroup(r.label, r.items, r.key, true));
+        continue;
+      }
+      const row = document.createElement('div');
+      row.className = 'mat-group';
+      const label = document.createElement('span');
+      label.textContent = r.label;
+      const blank = document.createElement('div');
+      blank.className = 'mat-items';
+      const ph = document.createElement('span');
+      ph.className = 'mat-empty';
+      ph.textContent = EMPTY[r.state] ?? '—';
+      blank.append(ph);
+      row.append(label, blank);
+      col.append(row);
     }
     grid.append(col);
   }
@@ -494,7 +477,14 @@ async function loadMaterials() {
   }
 }
 
-function materialGroup(label, items, kind) {
+/**
+ * 素材の 1 行。label の右にチップを並べる。
+ *
+ * compact は枠の下の列で使う。列は幅が狭いので、天賦本の秘境と地域は省き、
+ * はみ出したぶんは折り返さずに省略記号で切って tooltip に全文を入れる。
+ * 折り返すと行の高さが列ごとに変わり、隣の列と見比べられなくなる。
+ */
+function materialGroup(label, items, kind, compact = false) {
   const row = document.createElement('div');
   row.className = 'mat-group';
   const name = document.createElement('span');
@@ -506,38 +496,37 @@ function materialGroup(label, items, kind) {
     chip.className = 'mat-item';
     // 種別ごとに色を付ける。素材名を覚えていなくても種類で見分けられるように。
     if (kind) chip.dataset.kind = kind;
+
+    const parts = [it.name];
     const b = document.createElement('b');
     b.textContent = it.name;
     chip.append(b);
-    // 天賦本は名前も秘境名も覚えていないことがあるので、アイコンの図柄を言葉で添える。
-    // 正式名称（図柄）の形にして、どちらが正式名称かを取り違えないようにする。
-    // 未確認（motifDraft）のものは ? を付けて薄く出し、確定した情報と区別する。
+
+    // 天賦本の図柄。正式名称（図柄）の形にして、どちらが正式名称かを取り違えないようにする。
     if (it.motif) {
       const motif = document.createElement('span');
       motif.className = it.motifDraft ? 'mat-motif draft' : 'mat-motif';
       motif.textContent = it.motifDraft ? `（${it.motif}?）` : `（${it.motif}）`;
-      if (it.motifDraft) motif.title = 'まだ実物で確かめていない図柄です';
       chip.append(motif);
-    }
-    // 天賦本は「どこの秘境か」が分からないと辿れない。地域と入口を添える。
-    if (it.region) {
-      const place = document.createElement('span');
-      place.className = 'mat-from';
-      place.textContent = `${it.region}・${it.domain ?? ''}`.replace(/・$/, '');
-      place.title = it.entrance ? `入口: ${it.entrance}` : '';
-      chip.append(document.createTextNode(' '), place);
+      parts.push(motif.textContent);
     }
     // ボス素材は素材名だけでは何を殴ればいいのか分からないので入手元を添える。
-    if (it.from) {
-      const from = document.createElement('span');
-      from.className = 'mat-from';
-      from.textContent = it.from;
-      chip.append(document.createTextNode(' '), from);
+    // 天賦本の秘境も同じ枠だが、列では幅を食うので省く。
+    const from = it.region ? `${it.region}・${it.domain ?? ''}`.replace(/・$/, '') : it.from;
+    if (from) {
+      parts.push(`← ${from}`);
+      if (!compact) {
+        const el = document.createElement('span');
+        el.className = 'mat-from';
+        el.textContent = from;
+        el.title = it.entrance ? `入口: ${it.entrance}` : '';
+        chip.append(document.createTextNode(' '), el);
+      }
     }
-    // 天賦本は系統ごとに秘境と曜日が違う。旅人は 1 元素で 3 系統を要するので、
-    // 素材ごとに出さないと「いつ回れるのか」が分からなくなる。
     if (it.days?.length) {
-      chip.append(document.createTextNode(` ${it.days.map((d) => d.replace('曜', '')).join('・')}`));
+      const days = it.days.map((d) => d.replace('曜', '')).join('・');
+      parts.push(days);
+      chip.append(document.createTextNode(` ${days}`));
       if (availableToday(it.days, new Date())) {
         chip.append(document.createTextNode(' '), badge('今日', true));
       }
@@ -548,7 +537,10 @@ function materialGroup(label, items, kind) {
       who.className = 'mat-who';
       who.textContent = `（${it.who.join('・')}）`;
       chip.append(who);
+      parts.push(who.textContent);
     }
+    // 切れた場合に備えて、省いたぶんも含めた全文を tooltip に入れる。
+    if (compact) chip.title = parts.join(' ');
     list.append(chip);
   }
   row.append(name, list);
@@ -832,7 +824,7 @@ function showRoster(saved) {
     $(id).hidden = !has;
   }
   if (!has) {
-    for (const id of ['shelf', 'team', 'resonance']) $(id).replaceChildren();
+    for (const id of ['shelf', 'team']) $(id).replaceChildren();
     return;
   }
 

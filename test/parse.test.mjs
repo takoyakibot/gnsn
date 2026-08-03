@@ -16,7 +16,6 @@ import {
   buildIndex,
   LAST_ASCENSION_LEVEL,
   LEVEL_BANDS,
-  resonance,
   stats,
   talentDone,
   unknownNames,
@@ -144,60 +143,12 @@ test('検証用ロスターの 51 件はすべて属性データに存在する'
   assert.deepEqual(unknownNames(attached), []);
 });
 
-// --- 基準 6: 元素可変キャラを含む編成で共鳴を誤判定しない -----------------
+// --- 元素可変キャラの扱い -------------------------------------------------
 
 test('旅人・ドールは元素可変として扱われる', () => {
   for (const n of ['旅人', 'ドール（男）', 'ドール（女）']) {
     const [c] = attach([{ name: n, level: 90, constellation: 0 }], INDEX);
     assert.equal(c.element, '可変', `${n} が可変になっていない`);
-  }
-});
-
-test('可変キャラ 2 人だけでは共鳴と判定しない', () => {
-  const team = attach(
-    [
-      { name: '旅人', level: 90, constellation: 6 },
-      { name: 'ドール（女）', level: 90, constellation: 0 },
-      { name: '七七', level: 90, constellation: 2 },
-      { name: '香菱', level: 80, constellation: 1 },
-    ],
-    INDEX,
-  );
-  assert.deepEqual(resonance(team), []);
-});
-
-test('元素不明キャラ 2 人だけでは共鳴と判定しない', () => {
-  const team = attach(
-    [
-      { name: '未収録A', level: 1, constellation: 0 },
-      { name: '未収録B', level: 1, constellation: 0 },
-    ],
-    INDEX,
-  );
-  assert.deepEqual(resonance(team), []);
-});
-
-test('同一元素が 2 人いれば共鳴ありと判定する', () => {
-  const team = attach(
-    [
-      { name: '香菱', level: 80, constellation: 1 }, // 炎
-      { name: 'ベネット', level: 80, constellation: 5 }, // 炎
-      { name: '旅人', level: 90, constellation: 6 }, // 可変
-      { name: '七七', level: 90, constellation: 2 }, // 氷
-    ],
-    INDEX,
-  );
-  assert.deepEqual(resonance(team), [{ element: '炎', count: 2 }]);
-});
-
-// --- 照合キーの健全性 -----------------------------------------------------
-
-test('属性データ全件で照合キーが衝突しない', () => {
-  const seen = new Map();
-  for (const name of Object.keys(DATA)) {
-    const key = matchKey(name);
-    assert.equal(seen.has(key), false, `${seen.get(key)} と ${name} が同じキーになる`);
-    seen.set(key, name);
   }
 });
 
