@@ -48,6 +48,7 @@ test/                 node --test で走る検証
 manifest.webmanifest  ホーム画面から起動するための PWA manifest
 sw.js                 Service Worker（network-first・オフライン用の控え）
 icons/                アイコン（icon.svg が元データ・PNG は書き出し）
+                      「ぐ」の字形は Noto Sans JP (OFL 1.1) の輪郭を path 化したもの
 .github/workflows/    属性データの定期再生成
 ```
 
@@ -293,7 +294,15 @@ genshin-db 側にデータが無い節は `?` と同じ扱いで「データが�
 
 インストールできるのは HTTPS で配信されている場合だけ（`localhost` は例外）。GitHub Pages は HTTPS なのでそのまま条件を満たす。
 
-アイコンは `icons/icon.svg` が元データで、PNG はそこからの書き出し。公式のイラスト・ロゴ・マーク等は使っていない（棚に並ぶ背表紙を元素の色で表した自作の図案）。
+### アイコン
+
+`icons/icon.svg` が元データで、PNG はそこからの書き出し。図案は名前の頭文字「ぐ」一文字を、夜寄りの空色の角丸に金で置いたもの。公式のイラスト・ロゴ・マーク等は使っていない。
+
+小さくしたときに形が保つかで選んだ。棚のカードを並べる案・元素色の点を輪にする案も作ったが、24px（ブラウザのタブ相当）にすると意味が消えて模様になってしまう。一文字ならその大きさでも読める。
+
+「ぐ」の字形は **Noto Sans JP（SIL Open Font License 1.1）** の輪郭を `<path>` に落として埋め込んである。`font-family` で名前を参照する形にすると環境によって字形が変わり、ファビコンが端末ごとに別物になるため。
+
+`manifest.webmanifest` の `background_color` / `theme_color` はアイコンではなくアプリ側の既定（ライトの空色）に合わせてある。この 2 つが指すのは起動画面とウィンドウの色で、アイコンの地色ではない。
 
 ### Service Worker は network-first
 
